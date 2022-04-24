@@ -367,8 +367,6 @@ func (c *Cask) dowrite(act *action) {
 		c.hintLogSize += HintEncodeSize
 	}
 
-	fmt.Printf("update key map for %d\n", c.id)
 	c.keyMap.Add(hint.Key, hint)
 	act.retvchan <- retv{}
-	fmt.Printf("put %s = %s\n", act.key, act.value)
 }
