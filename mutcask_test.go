@@ -40,7 +40,7 @@ func TestMutcask(t *testing.T) {
 		{"QmW6esdA2tsRmoiqmAgNx71vdNNtgJEd44CKt4nncUTsur", []byte("939836")},
 	}
 	mutc, err := NewMutcask(PathConf(tmpdirpath(t)), CaskNumConf(6))
-	//mutc, err := NewMutcask(PathConf("/Users/lifeng/testdir/mutcask"), CaskNumConf(128))
+	//mutc, err := NewMutcask(PathConf("/Users/lifeng/testdir/mutcask"), CaskNumConf(8))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +59,7 @@ func TestMutcask(t *testing.T) {
 		}(item.Key, item.Value)
 	}
 	wg.Wait()
+
 	// test all key chan
 	kc, err := mutc.AllKeysChan(context.Background())
 	if err != nil {
@@ -103,34 +104,34 @@ func TestMutcask(t *testing.T) {
 	}
 	wg.Wait()
 
-	wg.Add(len(kvdata))
-	for _, item := range kvdata {
-		go func(k string, v []byte) {
-			defer wg.Done()
+	// wg.Add(len(kvdata))
+	// for _, item := range kvdata {
+	// 	go func(k string, v []byte) {
+	// 		defer wg.Done()
 
-			err := mutc.Delete(k)
-			if err != nil {
-				fmt.Println(err)
-				t.Fail()
-			}
-		}(item.Key, item.Value)
-	}
-	wg.Wait()
+	// 		err := mutc.Delete(k)
+	// 		if err != nil {
+	// 			fmt.Println(err)
+	// 			t.Fail()
+	// 		}
+	// 	}(item.Key, item.Value)
+	// }
+	// wg.Wait()
 
-	wg.Add(len(kvdata))
-	for _, item := range kvdata {
-		go func(k string, v []byte) {
-			defer wg.Done()
+	// wg.Add(len(kvdata))
+	// for _, item := range kvdata {
+	// 	go func(k string, v []byte) {
+	// 		defer wg.Done()
 
-			_, err := mutc.Get(k)
-			if err != ErrNotFound {
-				fmt.Printf("err type wrong %#v \n", err)
-				t.Fail()
-			}
+	// 		_, err := mutc.Get(k)
+	// 		if err != ErrNotFound {
+	// 			fmt.Printf("err type wrong %#v \n", err)
+	// 			t.Fail()
+	// 		}
 
-		}(item.Key, item.Value)
-	}
-	wg.Wait()
+	// 	}(item.Key, item.Value)
+	// }
+	// wg.Wait()
 }
 
 func tmpdirpath(t *testing.T) string {

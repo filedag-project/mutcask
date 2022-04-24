@@ -1,14 +1,13 @@
 package mutcask
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-
-	"golang.org/x/xerrors"
 )
 
 const vLogSuffix = ".vlog"
@@ -64,7 +63,7 @@ func (km *KeyMap) Get(key string) (h *Hint, b bool) {
 // 	delete(km.m, key)
 // }
 
-func buildKeyMap(hint *os.File) (*KeyMap, error) {
+func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 	finfo, err := hint.Stat()
 	if err != nil {
 		return nil, err
@@ -76,27 +75,32 @@ func buildKeyMap(hint *os.File) (*KeyMap, error) {
 	km.m = make(map[string]*Hint)
 	hint.Seek(0, 0)
 	offset := uint64(0)
-	buf := make([]byte, HintEncodeSize)
+	buf := make([]byte, HintEncodeSize*hintBootReadNum)
 	for {
 		n, err := hint.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				return nil, err
-			}
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+
+		if err == io.EOF && n == 0 {
 			// read end file
 			break
 		}
 		// should never happened
-		if n != HintEncodeSize {
-			return nil, xerrors.Errorf("read hint failed, expected %d bytes, read %d bytes", HintEncodeSize, n)
+		if n%HintEncodeSize != 0 {
+			return nil, fmt.Errorf("hint file maybe broken, expected %d bytes, read %d bytes", HintEncodeSize, n)
 		}
-		h := &Hint{}
-		if err = h.From(buf); err != nil {
-			return nil, err
+		unreadNum := 0
+		for unreadNum < n {
+			h := &Hint{}
+			if err = h.From(buf[unreadNum : unreadNum+HintEncodeSize]); err != nil {
+				return nil, err
+			}
+			unreadNum += HintEncodeSize
+			h.KOffset = offset
+			offset += HintEncodeSize
+			km.Add(h.Key, h)
 		}
-		h.KOffset = offset
-		offset += HintEncodeSize
-		km.Add(h.Key, h)
 	}
 	return km, nil
 }
@@ -132,7 +136,7 @@ func buildCaskMap(cfg *Config) (*CaskMap, error) {
 			if err != nil {
 				return nil, err
 			}
-			cask.keyMap, err = buildKeyMap(cask.hintLog)
+			cask.keyMap, err = buildKeyMap(cask.hintLog, cfg.HintBootReadNum)
 			if err != nil {
 				return nil, err
 			}

@@ -1,13 +1,15 @@
 package mutcask
 
 type Config struct {
-	Path    string
-	CaskNum uint32
+	Path            string
+	CaskNum         uint32
+	HintBootReadNum int
 }
 
 func defaultConfig() *Config {
 	return &Config{
-		CaskNum: 256,
+		CaskNum:         256,
+		HintBootReadNum: 1000,
 	}
 }
 
@@ -22,5 +24,11 @@ func CaskNumConf(caskNum int) Option {
 func PathConf(dir string) Option {
 	return func(cfg *Config) {
 		cfg.Path = dir
+	}
+}
+
+func HintBootReadNumConf(hn int) Option {
+	return func(cfg *Config) {
+		cfg.HintBootReadNum = hn
 	}
 }

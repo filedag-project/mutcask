@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	fslock "github.com/ipfs/go-fs-lock"
-	"golang.org/x/xerrors"
 )
 
 const lockFileName = "repo.lock"
@@ -53,7 +52,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	// try to get the repo lock
 	locked, err := fslock.Locked(repoPath, lockFileName)
 	if err != nil {
-		return nil, xerrors.Errorf("could not check lock status: %w", err)
+		return nil, fmt.Errorf("could not check lock status: %w", err)
 	}
 	if locked {
 		return nil, ErrRepoLocked
@@ -61,7 +60,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 
 	unlockRepo, err := fslock.Lock(repoPath, lockFileName)
 	if err != nil {
-		return nil, xerrors.Errorf("could not lock the repo: %w", err)
+		return nil, fmt.Errorf("could not lock the repo: %w", err)
 	}
 
 	m.caskMap, err = buildCaskMap(m.cfg)
