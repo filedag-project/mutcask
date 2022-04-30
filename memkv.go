@@ -7,6 +7,12 @@ import (
 
 var _ KVDB = (*memkv)(nil)
 
+func NewMemkv() KVDB {
+	return &memkv{
+		m: make(map[string][]byte),
+	}
+}
+
 // apply KVDB using map for test case usage
 type memkv struct {
 	sync.RWMutex
