@@ -22,7 +22,7 @@ type memkv struct {
 func (mkv *memkv) Put(key string, value []byte) error {
 	mkv.Lock()
 	defer mkv.Unlock()
-	mkv.m[key] = value
+	mkv.m[key] = clone(value)
 	return nil
 }
 
@@ -38,7 +38,7 @@ func (mkv *memkv) Get(key string) ([]byte, error) {
 	defer mkv.RUnlock()
 	bs, ok := mkv.m[key]
 	if ok {
-		return bs, nil
+		return clone(bs), nil
 	}
 
 	return nil, ErrNotFound
@@ -73,4 +73,10 @@ func (mkv *memkv) AllKeysChan(ctx context.Context) (chan string, error) {
 
 func (mkv *memkv) Close() error {
 	return nil
+}
+
+func clone(src []byte) (cp []byte) {
+	cp = make([]byte, len(src))
+	copy(cp, src)
+	return
 }
