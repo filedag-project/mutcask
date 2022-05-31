@@ -245,6 +245,8 @@ func (c *Cask) doread(act *action) {
 	//buf := make([]byte, act.hint.VSize)
 	buf := vBuf.Get().(vbuffer)
 	(&buf).size(int(act.hint.VSize))
+	defer vBuf.Put(buf)
+
 	_, err = c.vLog.ReadAt(buf, int64(act.hint.VOffset))
 	if err != nil {
 		return
@@ -253,7 +255,7 @@ func (c *Cask) doread(act *action) {
 	if err != nil {
 		return
 	}
-	vBuf.Put(buf)
+
 	act.retvchan <- retv{data: v}
 }
 
@@ -340,6 +342,7 @@ func (c *Cask) dowrite(act *action) {
 	voffset := c.vLogSize
 	// encode value
 	encbytes := EncodeValue(act.value)
+	defer vBuf.Put(vbuffer(encbytes))
 	// record encoded value size
 	vsize := uint32(len(encbytes))
 	// write to vlog file
@@ -347,7 +350,7 @@ func (c *Cask) dowrite(act *action) {
 	if err != nil {
 		return
 	}
-	vBuf.Put(vbuffer(encbytes))
+
 	// operations for one cask actually did in a sync style, so there is no need to use actomic
 	// update vlog file size
 	//atomic.AddUint64(&c.vLogSize, uint64(vsize))
@@ -362,11 +365,13 @@ func (c *Cask) dowrite(act *action) {
 	if err != nil {
 		return
 	}
+	defer hintBuf.Put(encHintBytes)
+
 	_, err = c.hintLog.WriteAt(encHintBytes, int64(hint.KOffset))
 	if err != nil {
 		return
 	}
-	hintBuf.Put(encHintBytes)
+
 	if isAddNew {
 		// update hint log file size
 		// atomic.AddUint64(&c.hintLogSize, HintEncodeSize)

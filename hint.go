@@ -79,6 +79,7 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 
 	buf := vBuf.Get().(vbuffer)
 	(&buf).size(HintEncodeSize * hintBootReadNum)
+	defer vBuf.Put(buf)
 	for {
 		n, err := hint.Read(buf)
 		if err != nil && err != io.EOF {
@@ -105,7 +106,7 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 			km.Add(h.Key, h)
 		}
 	}
-	vBuf.Put(buf)
+
 	return km, nil
 }
 
