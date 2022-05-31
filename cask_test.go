@@ -36,3 +36,17 @@ func TestValueEncodeDecode(t *testing.T) {
 		t.Fatal()
 	}
 }
+
+// func TestPool(t *testing.T) {
+// 	var s1 = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9}
+// 	fmt.Printf("len: %d, cap: %d\n", len(s1), cap(s1))
+// 	s2 := s1[:3]
+// 	fmt.Printf("len: %d, cap: %d\n", len(s2), cap(s2))
+// 	fmt.Println(s2)
+// 	s2 = s2[:cap(s2)]
+// 	fmt.Println(s2)
+// 	copy(s2[1:], []byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'})
+// 	fmt.Println(s2)
+// 	fmt.Printf("len: %d, cap: %d\n", len(s2), cap(s2))
+// 	t.Fail()
+// }

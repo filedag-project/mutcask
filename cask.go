@@ -37,7 +37,7 @@ func (h *Hint) Encode() (ret []byte, err error) {
 	if kl > MaxKeySize {
 		return nil, ErrKeySizeTooLong
 	}
-	ret = make([]byte, HintEncodeSize)
+	ret = hintBuf.Get().([]byte)
 	if h.Deleted {
 		ret[0] = HintDeletedFlag
 	}
@@ -68,12 +68,14 @@ func (h *Hint) From(buf []byte) (err error) {
 		crc32	:	value
 		4 		: 	xxxx
 **/
-func EncodeValue(v []byte) (ret []byte) {
-	ret = make([]byte, 4+len(v))
+func EncodeValue(v []byte) []byte {
+	buf := vBuf.Get().(vbuffer)
+	//ret = make([]byte, 4+len(v))
+	(&buf).size(4 + len(v))
 	c32 := crc32.ChecksumIEEE(v)
-	binary.LittleEndian.PutUint32(ret[0:4], c32)
-	copy(ret[4:], v)
-	return
+	binary.LittleEndian.PutUint32(buf[0:4], c32)
+	copy(buf[4:], v)
+	return buf
 }
 
 func DecodeValue(buf []byte, verify bool) (v []byte, err error) {
@@ -240,7 +242,9 @@ func (c *Cask) doread(act *action) {
 			act.retvchan <- retv{err: err}
 		}
 	}()
-	buf := make([]byte, act.hint.VSize)
+	//buf := make([]byte, act.hint.VSize)
+	buf := vBuf.Get().(vbuffer)
+	(&buf).size(int(act.hint.VSize))
 	_, err = c.vLog.ReadAt(buf, int64(act.hint.VOffset))
 	if err != nil {
 		return
@@ -249,6 +253,7 @@ func (c *Cask) doread(act *action) {
 	if err != nil {
 		return
 	}
+	vBuf.Put(buf)
 	act.retvchan <- retv{data: v}
 }
 
@@ -342,6 +347,7 @@ func (c *Cask) dowrite(act *action) {
 	if err != nil {
 		return
 	}
+	vBuf.Put(vbuffer(encbytes))
 	// operations for one cask actually did in a sync style, so there is no need to use actomic
 	// update vlog file size
 	//atomic.AddUint64(&c.vLogSize, uint64(vsize))
@@ -360,7 +366,7 @@ func (c *Cask) dowrite(act *action) {
 	if err != nil {
 		return
 	}
-
+	hintBuf.Put(encHintBytes)
 	if isAddNew {
 		// update hint log file size
 		// atomic.AddUint64(&c.hintLogSize, HintEncodeSize)
