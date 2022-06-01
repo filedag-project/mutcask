@@ -37,7 +37,7 @@ func (h *Hint) Encode() (ret []byte, err error) {
 	if kl > MaxKeySize {
 		return nil, ErrKeySizeTooLong
 	}
-	ret = hintBuf.Get().([]byte)
+	ret = *(hintBuf.Get().(*([]byte)))
 	if h.Deleted {
 		ret[0] = HintDeletedFlag
 	}
@@ -69,13 +69,13 @@ func (h *Hint) From(buf []byte) (err error) {
 		4 		: 	xxxx
 **/
 func EncodeValue(v []byte) []byte {
-	buf := vBuf.Get().(vbuffer)
+	buf := vBuf.Get().(*vbuffer)
 	//ret = make([]byte, 4+len(v))
-	(&buf).size(4 + len(v))
+	buf.size(4 + len(v))
 	c32 := crc32.ChecksumIEEE(v)
-	binary.LittleEndian.PutUint32(buf[0:4], c32)
-	copy(buf[4:], v)
-	return buf
+	binary.LittleEndian.PutUint32((*buf)[0:4], c32)
+	copy((*buf)[4:], v)
+	return *buf
 }
 
 func DecodeValue(buf []byte, verify bool) (v []byte, err error) {
@@ -243,15 +243,15 @@ func (c *Cask) doread(act *action) {
 		}
 	}()
 	//buf := make([]byte, act.hint.VSize)
-	buf := vBuf.Get().(vbuffer)
-	(&buf).size(int(act.hint.VSize))
+	buf := vBuf.Get().(*vbuffer)
+	buf.size(int(act.hint.VSize))
 	defer vBuf.Put(buf)
 
-	_, err = c.vLog.ReadAt(buf, int64(act.hint.VOffset))
+	_, err = c.vLog.ReadAt(*buf, int64(act.hint.VOffset))
 	if err != nil {
 		return
 	}
-	v, err := DecodeValue(buf, true)
+	v, err := DecodeValue(*buf, true)
 	if err != nil {
 		return
 	}
@@ -342,7 +342,7 @@ func (c *Cask) dowrite(act *action) {
 	voffset := c.vLogSize
 	// encode value
 	encbytes := EncodeValue(act.value)
-	defer vBuf.Put(vbuffer(encbytes))
+	defer vBuf.Put((*vbuffer)(&encbytes))
 	// record encoded value size
 	vsize := uint32(len(encbytes))
 	// write to vlog file
@@ -365,7 +365,7 @@ func (c *Cask) dowrite(act *action) {
 	if err != nil {
 		return
 	}
-	defer hintBuf.Put(encHintBytes)
+	defer hintBuf.Put(&encHintBytes)
 
 	_, err = c.hintLog.WriteAt(encHintBytes, int64(hint.KOffset))
 	if err != nil {

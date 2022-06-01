@@ -11,10 +11,12 @@ var (
 
 func init() {
 	hintBuf.New = func() interface{} {
-		return make([]byte, HintEncodeSize)
+		b := make([]byte, HintEncodeSize)
+		return &b
 	}
 	vBuf.New = func() interface{} {
-		return vbuffer(make([]byte, init_vbuf_size))
+		b := vbuffer(make([]byte, init_vbuf_size))
+		return &b
 	}
 }
 
