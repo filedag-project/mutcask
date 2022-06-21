@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/google/btree"
 	fslock "github.com/ipfs/go-fs-lock"
 )
 
@@ -181,17 +182,20 @@ func (m *mutcask) AllKeysChan(ctx context.Context) (chan string, error) {
 	go func(ctx context.Context, m *mutcask) {
 		defer close(kc)
 		for _, cask := range m.caskMap.m {
-			for key, h := range cask.keyMap.m {
-				if h.Deleted {
-					continue
+			cask.keyMap.m.Ascend(func(it btree.Item) bool {
+				if h, ok := it.(*Hint); ok {
+					if h.Deleted {
+						return true
+					}
+					select {
+					case <-ctx.Done():
+						return false
+					default:
+						kc <- h.Key
+					}
 				}
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					kc <- key
-				}
-			}
+				return false
+			})
 		}
 	}(ctx, m)
 	return kc, nil

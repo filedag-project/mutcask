@@ -3,7 +3,7 @@ module github.com/filedag-project/mutcask
 go 1.17
 
 require (
-	github.com/google/martian v2.1.0+incompatible
+	github.com/google/btree v1.1.2
 	github.com/ipfs/go-fs-lock v0.0.7
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f
 )

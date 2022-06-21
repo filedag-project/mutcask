@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/google/btree"
 )
 
 const vLogSuffix = ".vlog"
@@ -41,19 +43,23 @@ func (cm *CaskMap) CloseAll() {
 
 type KeyMap struct {
 	sync.RWMutex
-	m map[string]*Hint
+	m *btree.BTree
 }
 
 func (km *KeyMap) Add(key string, hint *Hint) {
 	km.Lock()
 	defer km.Unlock()
-	km.m[key] = hint
+	//km.m[key] = hint
+	km.m.ReplaceOrInsert(hint)
 }
 
 func (km *KeyMap) Get(key string) (h *Hint, b bool) {
 	km.RLock()
 	defer km.RUnlock()
-	h, b = km.m[key]
+	//h, b = km.m[key]
+	h, b = km.m.Get(&Hint{
+		Key: key,
+	}).(*Hint)
 	return
 }
 
@@ -71,8 +77,10 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 	if finfo.Size()%HintEncodeSize != 0 {
 		return nil, ErrHintLogBroken
 	}
-	km := &KeyMap{}
-	km.m = make(map[string]*Hint)
+	km := &KeyMap{
+		m: keyMapInit(),
+	}
+	//km.m = make(map[string]*Hint)
 	hint.Seek(0, 0)
 	offset := uint64(0)
 	buf := make([]byte, HintEncodeSize*hintBootReadNum)
@@ -161,4 +169,8 @@ func fileSize(f *os.File) (uint64, error) {
 		return 0, err
 	}
 	return uint64(finfo.Size()), nil
+}
+
+func keyMapInit() *btree.BTree {
+	return btree.New(8)
 }
