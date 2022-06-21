@@ -1,11 +1,14 @@
 package mutcask
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"os"
 	"sync"
+
+	"github.com/google/btree"
 )
 
 const MaxKeySize = 128
@@ -62,6 +65,13 @@ func (h *Hint) From(buf []byte) (err error) {
 	h.VOffset = binary.LittleEndian.Uint64(buf[HintKeySize : HintKeySize+8])
 	h.VSize = binary.LittleEndian.Uint32(buf[HintKeySize+8:])
 	return
+}
+
+func (h *Hint) Less(than btree.Item) bool {
+	if other, ok := than.(*Hint); ok {
+		return bytes.Compare([]byte(h.Key), []byte(other.Key)) < 0
+	}
+	return false
 }
 
 /**
@@ -135,7 +145,7 @@ func NewCask(id uint32) *Cask {
 		actChan:   make(chan *action),
 	}
 	cask.keyMap = &KeyMap{
-		m: make(map[string]*Hint),
+		m: keyMapInit(),
 	}
 	var once sync.Once
 	cask.close = func() {
