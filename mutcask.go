@@ -63,6 +63,9 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not lock the repo: %w", err)
 	}
+	if m.cfg.InitBuf > 0 {
+		setInitBuf(m.cfg.InitBuf)
+	}
 
 	m.caskMap, err = buildCaskMap(m.cfg)
 	if err != nil {

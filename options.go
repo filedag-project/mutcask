@@ -4,6 +4,7 @@ type Config struct {
 	Path            string
 	CaskNum         uint32
 	HintBootReadNum int
+	InitBuf         int
 }
 
 func defaultConfig() *Config {
@@ -30,5 +31,11 @@ func PathConf(dir string) Option {
 func HintBootReadNumConf(hn int) Option {
 	return func(cfg *Config) {
 		cfg.HintBootReadNum = hn
+	}
+}
+
+func InitBufConf(size int) Option {
+	return func(cfg *Config) {
+		cfg.InitBuf = size
 	}
 }
