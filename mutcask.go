@@ -2,6 +2,8 @@ package mutcask
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"hash/crc32"
 	"os"
@@ -164,6 +166,21 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	}
 
 	return cask.Read(key)
+}
+
+func (m *mutcask) CheckSum(key string) (string, error) {
+	id := m.fileID(key)
+	cask, has := m.caskMap.Get(id)
+	if !has {
+		return "", ErrNotFound
+	}
+
+	v, err := cask.Read(key)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(v)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (m *mutcask) Size(key string) (int, error) {

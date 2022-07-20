@@ -2,6 +2,8 @@ package mutcask
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"sync"
 )
 
@@ -42,6 +44,18 @@ func (mkv *memkv) Get(key string) ([]byte, error) {
 	}
 
 	return nil, ErrNotFound
+}
+
+func (mkv *memkv) CheckSum(key string) (string, error) {
+	mkv.RLock()
+	defer mkv.RUnlock()
+	bs, ok := mkv.m[key]
+	if ok {
+		sum := (sha256.Sum256(bs))
+		return hex.EncodeToString(sum[:]), nil
+	}
+
+	return "", ErrNotFound
 }
 
 func (mkv *memkv) Size(key string) (int, error) {

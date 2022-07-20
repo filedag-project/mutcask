@@ -13,6 +13,7 @@ type KVDB interface {
 	Delete(string) error
 	Get(string) ([]byte, error)
 	Size(string) (int, error)
+	CheckSum(string) (string, error)
 
 	AllKeysChan(context.Context) (chan string, error)
 	Close() error
