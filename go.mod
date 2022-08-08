@@ -3,12 +3,15 @@ module github.com/filedag-project/mutcask
 go 1.17
 
 require (
+	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/google/btree v1.1.2
 	github.com/ipfs/go-fs-lock v0.0.7
+	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f
 )
 
 require (
+	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/ipfs/go-ipfs-util v0.0.2 // indirect
 	github.com/ipfs/go-log/v2 v2.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
@@ -18,6 +21,7 @@ require (
 	github.com/multiformats/go-multihash v0.0.13 // indirect
 	github.com/multiformats/go-varint v0.0.5 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0 // indirect
