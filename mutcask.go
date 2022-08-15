@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/google/btree"
 	fslock "github.com/ipfs/go-fs-lock"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
 const lockFileName = "repo.lock"
+const keys_dir = "keys"
 
 var _ KVDB = (*mutcask)(nil)
 
@@ -25,6 +27,7 @@ type mutcask struct {
 	createCaskChan chan *createCaskRequst
 	close          func()
 	closeChan      chan struct{}
+	keys           *leveldb.DB
 }
 
 func NewMutcask(opts ...Option) (*mutcask, error) {
@@ -68,8 +71,12 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	if m.cfg.InitBuf > 0 {
 		setInitBuf(m.cfg.InitBuf)
 	}
-
-	m.caskMap, err = buildCaskMap(m.cfg)
+	db, err := leveldb.OpenFile(filepath.Join(repoPath, keys_dir), nil)
+	if err != nil {
+		return nil, err
+	}
+	m.keys = db
+	m.caskMap, err = buildCaskMap(m.cfg, db)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +86,9 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 			close(m.closeChan)
 			unlockRepo.Close()
 		})
+	}
+	if m.cfg.Migrate {
+		doMigrate(m.cfg, m.keys)
 	}
 	m.handleCreateCask()
 	return m, nil
@@ -98,7 +108,7 @@ func (m *mutcask) handleCreateCask() {
 						req.done <- ErrNone
 						return
 					}
-					cask := NewCask(req.id)
+					cask := NewCask(req.id, m.keys)
 					var err error
 					// create vlog file
 					cask.vLog, err = os.OpenFile(filepath.Join(m.cfg.Path, m.vLogName(req.id)), os.O_RDWR|os.O_CREATE, 0644)
@@ -106,12 +116,12 @@ func (m *mutcask) handleCreateCask() {
 						req.done <- err
 						return
 					}
-					// create hintlog file
-					cask.hintLog, err = os.OpenFile(filepath.Join(m.cfg.Path, m.hintLogName(req.id)), os.O_RDWR|os.O_CREATE, 0644)
-					if err != nil {
-						req.done <- err
-						return
-					}
+					// // create hintlog file
+					// cask.hintLog, err = os.OpenFile(filepath.Join(m.cfg.Path, m.hintLogName(req.id)), os.O_RDWR|os.O_CREATE, 0644)
+					// if err != nil {
+					// 	req.done <- err
+					// 	return
+					// }
 					m.caskMap.Add(req.id, cask)
 					ids = append(ids, req.id)
 					req.done <- ErrNone
@@ -198,27 +208,46 @@ func (m *mutcask) Close() error {
 	return nil
 }
 func (m *mutcask) AllKeysChan(ctx context.Context) (chan string, error) {
-	kc := make(chan string)
-	go func(ctx context.Context, m *mutcask) {
-		defer close(kc)
-		for _, cask := range m.caskMap.m {
-			cask.keyMap.m.Ascend(func(it btree.Item) bool {
-				if h, ok := it.(*Hint); ok {
-					if h.Deleted {
-						return true
-					}
-					select {
-					case <-ctx.Done():
-						return false
-					default:
-						kc <- h.Key
-					}
-				}
-				return false
-			})
+	iter := m.keys.NewIterator(nil, nil)
+	out := make(chan string, 1)
+	go func(iter iterator.Iterator, oc chan string) {
+		defer iter.Release()
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			if !iter.Next() {
+				return
+			}
+			out <- string(iter.Key())
 		}
-	}(ctx, m)
-	return kc, nil
+		// Todo: log if has iter.Error()
+	}(iter, out)
+	return out, nil
+	// kc := make(chan string)
+	// go func(ctx context.Context, m *mutcask) {
+	// 	defer close(kc)
+	// 	for _, cask := range m.caskMap.m {
+	// 		cask.keyMap.m.Ascend(func(it btree.Item) bool {
+	// 			if h, ok := it.(*Hint); ok {
+	// 				if h.Deleted {
+	// 					return true
+	// 				}
+	// 				select {
+	// 				case <-ctx.Done():
+	// 					return false
+	// 				default:
+	// 					kc <- h.Key
+	// 				}
+	// 			}
+	// 			return false
+	// 		})
+	// 	}
+	// }(ctx, m)
+	// return kc, nil
 }
 
 func (m *mutcask) fileID(key string) uint32 {

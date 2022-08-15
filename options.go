@@ -5,6 +5,7 @@ type Config struct {
 	CaskNum         uint32
 	HintBootReadNum int
 	InitBuf         int
+	Migrate         bool
 }
 
 func defaultConfig() *Config {
@@ -37,5 +38,11 @@ func HintBootReadNumConf(hn int) Option {
 func InitBufConf(size int) Option {
 	return func(cfg *Config) {
 		cfg.InitBuf = size
+	}
+}
+
+func MigrateConf() Option {
+	return func(cfg *Config) {
+		cfg.Migrate = true
 	}
 }

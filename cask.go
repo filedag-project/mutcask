@@ -8,7 +8,9 @@ import (
 	"os"
 	"sync"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/google/btree"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const MaxKeySize = 128
@@ -22,6 +24,38 @@ const HintEncodeSize = HintKeySize + 8 + 4
 const (
 	HintDeletedFlag = byte(1)
 )
+
+type HintLV struct {
+	VOffset uint64
+	VSize   uint32
+}
+
+func (h *HintLV) Bytes() (ret []byte, err error) {
+	return cbor.Marshal(h)
+}
+
+func HintLVFromBytes(b []byte) (h *HintLV, err error) {
+	h = &HintLV{}
+	err = cbor.Unmarshal(b, h)
+	return
+}
+
+func get_hint(keys *leveldb.DB, key string) (h *Hint, err error) {
+	d, err := keys.Get([]byte(key), nil)
+	if err != nil {
+		return nil, err
+	}
+	hlv, err := HintLVFromBytes(d)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Hint{
+		Key:     key,
+		VOffset: hlv.VOffset,
+		VSize:   hlv.VSize,
+	}, nil
+}
 
 type Hint struct {
 	Key     string
@@ -126,26 +160,25 @@ type retv struct {
 }
 
 type Cask struct {
-	id          uint32
-	close       func()
-	closeChan   chan struct{}
-	actChan     chan *action
-	vLog        *os.File
-	vLogSize    uint64
-	hintLog     *os.File
-	hintLogSize uint64
-	keyMap      *KeyMap
+	id        uint32
+	close     func()
+	closeChan chan struct{}
+	actChan   chan *action
+	vLog      *os.File
+	vLogSize  uint64
+	keys      *leveldb.DB
+	// hintLog     *os.File
+	// hintLogSize uint64
+	// keyMap      *KeyMap
 }
 
-func NewCask(id uint32) *Cask {
+func NewCask(id uint32, kdb *leveldb.DB) *Cask {
 	cc := make(chan struct{})
 	cask := &Cask{
 		id:        id,
 		closeChan: cc,
 		actChan:   make(chan *action),
-	}
-	cask.keyMap = &KeyMap{
-		m: keyMapInit(),
+		keys:      kdb,
 	}
 	var once sync.Once
 	cask.close = func() {
@@ -179,9 +212,6 @@ func NewCask(id uint32) *Cask {
 
 func (c *Cask) Close() {
 	c.close()
-	if c.hintLog != nil {
-		c.hintLog.Close()
-	}
 	if c.vLog != nil {
 		c.vLog.Close()
 	}
@@ -201,8 +231,8 @@ func (c *Cask) Put(key string, value []byte) (err error) {
 }
 
 func (c *Cask) Delete(key string) (err error) {
-	hint, has := c.keyMap.Get(key)
-	if !has || hint.Deleted {
+	hint, err := get_hint(c.keys, key)
+	if err != nil {
 		return nil
 	}
 	retvc := make(chan retv)
@@ -218,8 +248,8 @@ func (c *Cask) Delete(key string) (err error) {
 }
 
 func (c *Cask) Read(key string) (v []byte, err error) {
-	hint, has := c.keyMap.Get(key)
-	if !has || hint.Deleted {
+	hint, err := get_hint(c.keys, key)
+	if err != nil {
 		return nil, ErrNotFound
 	}
 
@@ -238,8 +268,8 @@ func (c *Cask) Read(key string) (v []byte, err error) {
 }
 
 func (c *Cask) Size(key string) (int, error) {
-	hint, has := c.keyMap.Get(key)
-	if !has || hint.Deleted {
+	hint, err := get_hint(c.keys, key)
+	if err != nil {
 		return -1, ErrNotFound
 	}
 	return int(hint.VSize - 4), nil
@@ -276,27 +306,8 @@ func (c *Cask) dodelete(act *action) {
 			act.retvchan <- retv{err: err}
 		}
 	}()
-	// operations for one cask actually did in a sync style, so there is no need to use actomic
-	fsize := c.hintLogSize // atomic.LoadUint64(&c.hintLogSize)
-	//fmt.Printf("%d | %s hint offset: %d, %d, file size: %d\n", c.id, act.key, act.hint.KOffset, act.hint.KOffset+HintEncodeSize, fsize)
-	if act.hint.KOffset+HintEncodeSize > fsize {
-		err = ErrReadHintBeyondRange
-		return
-	}
-	_, err = c.hintLog.WriteAt([]byte{HintDeletedFlag}, int64(act.hint.KOffset))
-	if err != nil {
-		return
-	}
-	// h := &Hint{
-	// 	Deleted: true,
-	// 	Key:     act.hint.Key,
-	// 	KOffset: act.hint.KOffset,
-	// 	VOffset: act.hint.VOffset,
-	// 	VSize:   act.hint.VSize,
-	// }
-	act.hint.Deleted = true
-	c.keyMap.Add(act.key, act.hint)
-	// truncate the last hint
+	// current only delete key not the data
+	c.keys.Delete([]byte(act.hint.Key), nil)
 	act.retvchan <- retv{}
 }
 
@@ -308,45 +319,7 @@ func (c *Cask) dowrite(act *action) {
 		}
 	}()
 
-	var hint = &Hint{}
-	var isAddNew bool
-	// check if key value already been saved
-	if h, has := c.keyMap.Get(act.key); has {
-		hint = h
-		// the crc code
-		buf := make([]byte, 4)
-		_, err = c.vLog.ReadAt(buf, int64(h.VOffset))
-		if err != nil {
-			return
-		}
-
-		crcRecord := binary.LittleEndian.Uint32(buf)
-		crcv := crc32.ChecksumIEEE(act.value)
-		// value has same crc code
-		if crcRecord == crcv && !h.Deleted {
-			act.retvchan <- retv{}
-			return
-		}
-		// value has same crc code but in deleted state
-		// should just update hint to undeleted state
-		if crcRecord == crcv && h.Deleted {
-			if hint.KOffset+HintEncodeSize > c.hintLogSize {
-				err = ErrReadHintBeyondRange
-				return
-			}
-			_, err = c.hintLog.WriteAt([]byte{HintDeletedFlag}, int64(hint.KOffset))
-			if err != nil {
-				return
-			}
-			hint.Deleted = false
-			c.keyMap.Add(hint.Key, hint)
-			act.retvchan <- retv{}
-			return
-		}
-	} else {
-		isAddNew = true
-		hint.KOffset = c.hintLogSize
-	}
+	var hint = &HintLV{}
 
 	// record file size as value offset
 	voffset := c.vLogSize
@@ -366,28 +339,18 @@ func (c *Cask) dowrite(act *action) {
 	//atomic.AddUint64(&c.vLogSize, uint64(vsize))
 	c.vLogSize += uint64(vsize)
 
-	hint.Key = act.key
 	hint.VOffset = voffset
 	hint.VSize = vsize
-	hint.Deleted = false
 
-	encHintBytes, err := hint.Encode()
-	if err != nil {
-		return
-	}
-	defer hintBuf.Put(&encHintBytes)
-
-	_, err = c.hintLog.WriteAt(encHintBytes, int64(hint.KOffset))
+	hd, err := hint.Bytes()
 	if err != nil {
 		return
 	}
 
-	if isAddNew {
-		// update hint log file size
-		// atomic.AddUint64(&c.hintLogSize, HintEncodeSize)
-		c.hintLogSize += HintEncodeSize
+	err = c.keys.Put([]byte(act.key), hd, nil)
+	if err != nil {
+		return
 	}
 
-	c.keyMap.Add(hint.Key, hint)
 	act.retvchan <- retv{}
 }

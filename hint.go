@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/google/btree"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const vLogSuffix = ".vlog"
@@ -118,7 +119,89 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 	return km, nil
 }
 
-func buildCaskMap(cfg *Config) (*CaskMap, error) {
+func doMigrate(cfg *Config, keys *leveldb.DB) error {
+	var err error
+	dirents, err := os.ReadDir(cfg.Path)
+	if err != nil {
+		return err
+	}
+
+	for _, ent := range dirents {
+		if !ent.IsDir() && strings.HasSuffix(ent.Name(), hintLogSuffix) {
+			hintLog, err := os.OpenFile(filepath.Join(cfg.Path, ent.Name()), os.O_RDWR, 0644)
+			if err != nil {
+				return err
+			}
+
+			err = migrateKeys(hintLog, cfg.HintBootReadNum, keys)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func migrateKeys(hint *os.File, hintBootReadNum int, keys *leveldb.DB) error {
+	finfo, err := hint.Stat()
+	if err != nil {
+		return err
+	}
+	if finfo.Size()%HintEncodeSize != 0 {
+		return ErrHintLogBroken
+	}
+
+	hint.Seek(0, 0)
+	offset := uint64(0)
+	//buf := make([]byte, HintEncodeSize*hintBootReadNum)
+
+	buf := vBuf.Get().(*vbuffer)
+	buf.size(HintEncodeSize * hintBootReadNum)
+	defer vBuf.Put(buf)
+	for {
+		n, err := hint.Read(*buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+
+		if err == io.EOF && n == 0 {
+			// read end file
+			break
+		}
+		// should never happened
+		if n%HintEncodeSize != 0 {
+			return fmt.Errorf("hint file maybe broken, expected %d bytes, read %d bytes", HintEncodeSize, n)
+		}
+		unreadNum := 0
+		for unreadNum < n {
+			h := &Hint{}
+			if err = h.From((*buf)[unreadNum : unreadNum+HintEncodeSize]); err != nil {
+				return err
+			}
+			unreadNum += HintEncodeSize
+			h.KOffset = offset
+			offset += HintEncodeSize
+			hlv := &HintLV{
+				VOffset: h.VOffset,
+				VSize:   h.VSize,
+			}
+			hlvd, err := hlv.Bytes()
+			if err != nil {
+				return err
+			}
+			if keys.Put([]byte(h.Key), hlvd, nil) == nil {
+				fmt.Printf("%s migated\n", h.Key)
+			} else {
+				fmt.Printf("%s migated failed\n", h.Key)
+			}
+		}
+	}
+
+	return nil
+}
+
+func buildCaskMap(cfg *Config, keys *leveldb.DB) (*CaskMap, error) {
 	var err error
 	dirents, err := os.ReadDir(cfg.Path)
 	if err != nil {
@@ -133,26 +216,26 @@ func buildCaskMap(cfg *Config) (*CaskMap, error) {
 	}()
 
 	for _, ent := range dirents {
-		if !ent.IsDir() && strings.HasSuffix(ent.Name(), hintLogSuffix) {
-			name := strings.TrimSuffix(ent.Name(), hintLogSuffix)
+		if !ent.IsDir() && strings.HasSuffix(ent.Name(), vLogSuffix) {
+			name := strings.TrimSuffix(ent.Name(), vLogSuffix)
 			id, err := strconv.ParseUint(name, 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			cask := NewCask(uint32(id))
+			cask := NewCask(uint32(id), keys)
 			cm.Add(uint32(id), cask)
-			cask.hintLog, err = os.OpenFile(filepath.Join(cfg.Path, ent.Name()), os.O_RDWR, 0644)
-			if err != nil {
-				return nil, err
-			}
-			cask.hintLogSize, err = fileSize(cask.hintLog)
-			if err != nil {
-				return nil, err
-			}
-			cask.keyMap, err = buildKeyMap(cask.hintLog, cfg.HintBootReadNum)
-			if err != nil {
-				return nil, err
-			}
+			// cask.hintLog, err = os.OpenFile(filepath.Join(cfg.Path, ent.Name()), os.O_RDWR, 0644)
+			// if err != nil {
+			// 	return nil, err
+			// }
+			// cask.hintLogSize, err = fileSize(cask.hintLog)
+			// if err != nil {
+			// 	return nil, err
+			// }
+			// cask.keyMap, err = buildKeyMap(cask.hintLog, cfg.HintBootReadNum)
+			// if err != nil {
+			// 	return nil, err
+			// }
 
 			cask.vLog, err = os.OpenFile(filepath.Join(cfg.Path, name+vLogSuffix), os.O_RDWR, 0644)
 			if err != nil {
