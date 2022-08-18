@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/google/btree v1.1.2
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/ipfs/go-fs-lock v0.0.7
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f
