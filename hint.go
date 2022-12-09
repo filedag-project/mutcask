@@ -237,7 +237,7 @@ func buildCaskMap(cfg *Config, keys *leveldb.DB) (*CaskMap, error) {
 			// 	return nil, err
 			// }
 
-			cask.vLog, err = os.OpenFile(filepath.Join(cfg.Path, name+vLogSuffix), os.O_RDWR, 0644)
+			cask.vLog, err = os.OpenFile(filepath.Join(cfg.Path, name+vLogSuffix), os.O_APPEND, 0644)
 			if err != nil {
 				return nil, err
 			}

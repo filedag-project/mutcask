@@ -135,9 +135,9 @@ func (m *mutcask) vLogName(id uint32) string {
 	return fmt.Sprintf("%08d%s", id, vLogSuffix)
 }
 
-func (m *mutcask) hintLogName(id uint32) string {
-	return fmt.Sprintf("%08d%s", id, hintLogSuffix)
-}
+// func (m *mutcask) hintLogName(id uint32) string {
+// 	return fmt.Sprintf("%08d%s", id, hintLogSuffix)
+// }
 
 func (m *mutcask) Put(key string, value []byte) (err error) {
 	id := m.fileID(key)
@@ -169,23 +169,38 @@ func (m *mutcask) Delete(key string) error {
 }
 
 func (m *mutcask) Get(key string) ([]byte, error) {
-	id := m.fileID(key)
-	cask, has := m.caskMap.Get(id)
-	if !has {
+	hint, err := get_hint(m.keys, key)
+	if err != nil {
 		return nil, ErrNotFound
 	}
+	id := m.fileID(key)
+	fp := filepath.Join(m.cfg.Path, m.vLogName(id))
+	fmt.Printf("get key from vlog: %s\n", fp)
 
-	return cask.Read(key)
+	buf := vBuf.Get().(*vbuffer)
+	buf.size(int(hint.VSize))
+	defer vBuf.Put(buf)
+
+	fh, err := os.Open(fp)
+	if err != nil {
+		return nil, err
+	}
+	defer fh.Close()
+
+	_, err = fh.ReadAt(*buf, int64(hint.VOffset))
+	if err != nil {
+		return nil, err
+	}
+	v, err := DecodeValue(*buf, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
 }
 
 func (m *mutcask) CheckSum(key string) (string, error) {
-	id := m.fileID(key)
-	cask, has := m.caskMap.Get(id)
-	if !has {
-		return "", ErrNotFound
-	}
-
-	v, err := cask.Read(key)
+	v, err := m.Get(key)
 	if err != nil {
 		return "", err
 	}
@@ -194,12 +209,16 @@ func (m *mutcask) CheckSum(key string) (string, error) {
 }
 
 func (m *mutcask) Size(key string) (int, error) {
-	id := m.fileID(key)
-	cask, has := m.caskMap.Get(id)
-	if !has {
+	// id := m.fileID(key)
+	// cask, has := m.caskMap.Get(id)
+	// if !has {
+	// 	return -1, ErrNotFound
+	// }
+	hint, err := get_hint(m.keys, key)
+	if err != nil {
 		return -1, ErrNotFound
 	}
-	return cask.Size(key)
+	return int(hint.VSize - 4), nil
 }
 
 func (m *mutcask) Close() error {

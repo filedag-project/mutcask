@@ -1,6 +1,6 @@
 module github.com/filedag-project/mutcask
 
-go 1.17
+go 1.18
 
 require (
 	github.com/fxamacker/cbor/v2 v2.4.0
@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/ipfs/go-fs-lock v0.0.7
 	github.com/syndtr/goleveldb v1.0.0
-	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
 )
 
 require (
@@ -28,5 +28,5 @@ require (
 	go.uber.org/zap v1.16.0 // indirect
 	go4.org v0.0.0-20200411211856-f5505b9728dd // indirect
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f // indirect
+	golang.org/x/sys v0.3.0 // indirect
 )

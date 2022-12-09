@@ -155,8 +155,7 @@ type action struct {
 }
 
 type retv struct {
-	err  error
-	data []byte
+	err error
 }
 
 type Cask struct {
@@ -193,8 +192,8 @@ func NewCask(id uint32, kdb *leveldb.DB) *Cask {
 				return
 			case act := <-cask.actChan:
 				switch act.optype {
-				case opread:
-					cask.doread(act)
+				// case opread:
+				// 	cask.doread(act)
 				case opdelete:
 					cask.dodelete(act)
 				case opwrite:
@@ -247,25 +246,25 @@ func (c *Cask) Delete(key string) (err error) {
 	return ret.err
 }
 
-func (c *Cask) Read(key string) (v []byte, err error) {
-	hint, err := get_hint(c.keys, key)
-	if err != nil {
-		return nil, ErrNotFound
-	}
+// func (c *Cask) Read(key string) (v []byte, err error) {
+// 	hint, err := get_hint(c.keys, key)
+// 	if err != nil {
+// 		return nil, ErrNotFound
+// 	}
 
-	retvc := make(chan retv)
-	c.actChan <- &action{
-		optype:   opread,
-		hint:     hint,
-		retvchan: retvc,
-	}
-	ret := <-retvc
-	if ret.err != nil {
-		return nil, ret.err
-	}
-	return ret.data, nil
+// 	retvc := make(chan retv)
+// 	c.actChan <- &action{
+// 		optype:   opread,
+// 		hint:     hint,
+// 		retvchan: retvc,
+// 	}
+// 	ret := <-retvc
+// 	if ret.err != nil {
+// 		return nil, ret.err
+// 	}
+// 	return ret.data, nil
 
-}
+// }
 
 func (c *Cask) Size(key string) (int, error) {
 	hint, err := get_hint(c.keys, key)
@@ -275,29 +274,29 @@ func (c *Cask) Size(key string) (int, error) {
 	return int(hint.VSize - 4), nil
 }
 
-func (c *Cask) doread(act *action) {
-	var err error
-	defer func() {
-		if err != nil {
-			act.retvchan <- retv{err: err}
-		}
-	}()
-	//buf := make([]byte, act.hint.VSize)
-	buf := vBuf.Get().(*vbuffer)
-	buf.size(int(act.hint.VSize))
-	defer vBuf.Put(buf)
+// func (c *Cask) doread(act *action) {
+// 	var err error
+// 	defer func() {
+// 		if err != nil {
+// 			act.retvchan <- retv{err: err}
+// 		}
+// 	}()
+// 	//buf := make([]byte, act.hint.VSize)
+// 	buf := vBuf.Get().(*vbuffer)
+// 	buf.size(int(act.hint.VSize))
+// 	defer vBuf.Put(buf)
 
-	_, err = c.vLog.ReadAt(*buf, int64(act.hint.VOffset))
-	if err != nil {
-		return
-	}
-	v, err := DecodeValue(*buf, true)
-	if err != nil {
-		return
-	}
+// 	_, err = c.vLog.ReadAt(*buf, int64(act.hint.VOffset))
+// 	if err != nil {
+// 		return
+// 	}
+// 	v, err := DecodeValue(*buf, true)
+// 	if err != nil {
+// 		return
+// 	}
 
-	act.retvchan <- retv{data: v}
-}
+// 	act.retvchan <- retv{data: v}
+// }
 
 func (c *Cask) dodelete(act *action) {
 	var err error
@@ -329,7 +328,7 @@ func (c *Cask) dowrite(act *action) {
 	// record encoded value size
 	vsize := uint32(len(encbytes))
 	// write to vlog file
-	_, err = c.vLog.WriteAt(encbytes, int64(voffset))
+	_, err = c.vLog.Write(encbytes)
 	if err != nil {
 		return
 	}
