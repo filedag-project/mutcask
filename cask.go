@@ -166,6 +166,7 @@ type Cask struct {
 	vLog      *os.File
 	vLogSize  uint64
 	keys      *leveldb.DB
+	path      string
 	// hintLog     *os.File
 	// hintLogSize uint64
 	// keyMap      *KeyMap

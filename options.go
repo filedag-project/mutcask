@@ -6,12 +6,14 @@ type Config struct {
 	HintBootReadNum int
 	InitBuf         int
 	Migrate         bool
+	MaxLogFileSize  int
 }
 
 func defaultConfig() *Config {
 	return &Config{
 		CaskNum:         256,
 		HintBootReadNum: 1000,
+		MaxLogFileSize:  1 << 20,
 	}
 }
 
