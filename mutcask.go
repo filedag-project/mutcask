@@ -175,7 +175,6 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	}
 	id := m.fileID(key)
 	fp := filepath.Join(m.cfg.Path, m.vLogName(id))
-	fmt.Printf("get key from vlog: %s\n", fp)
 
 	buf := vBuf.Get().(*vbuffer)
 	buf.size(int(hint.VSize))
