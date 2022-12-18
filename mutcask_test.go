@@ -2,7 +2,6 @@ package mutcask
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"sync"
@@ -39,8 +38,8 @@ func TestMutcask(t *testing.T) {
 		{"QmXgEMNz5JbajkQ8tXRJHgbC12aogba9gwTgqTQW2LCK35", []byte("839836")},
 		{"QmW6esdA2tsRmoiqmAgNx71vdNNtgJEd44CKt4nncUTsur", []byte("939836")},
 	}
-	mutc, err := NewMutcask(PathConf(tmpdirpath(t)), CaskNumConf(1), InitBufConf(VBUF_4M))
-	//mutc, err := NewMutcask(PathConf("/Users/lifeng/testdir/mutcask"), CaskNumConf(8))
+	mutc, err := NewMutcask(PathConf(tmpdirpath(t)))
+	//mutc, err := NewMutcask(PathConf("/Users/lifeng/testdir/mutcask"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +51,7 @@ func TestMutcask(t *testing.T) {
 		go func(k string, v []byte) {
 			defer wg.Done()
 
-			err = mutc.Put(k, v)
+			err = mutc.Put([]byte(k), v)
 			if err != nil {
 				t.Failed()
 			}
@@ -60,20 +59,12 @@ func TestMutcask(t *testing.T) {
 	}
 	wg.Wait()
 
-	// test all key chan
-	kc, err := mutc.AllKeysChan(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for k := range kc {
-		fmt.Println(k)
-	}
 	wg.Add(len(kvdata))
 	for _, item := range kvdata {
 		go func(k string, v []byte) {
 			defer wg.Done()
 
-			b, err := mutc.Get(k)
+			b, err := mutc.Get([]byte(k))
 			if err != nil {
 				fmt.Println(err)
 				t.Fail()
@@ -91,7 +82,7 @@ func TestMutcask(t *testing.T) {
 		go func(k string, v []byte) {
 			defer wg.Done()
 
-			n, err := mutc.Size(k)
+			n, err := mutc.Size([]byte(k))
 			if err != nil {
 				fmt.Println(err)
 				t.Fail()
@@ -109,7 +100,7 @@ func TestMutcask(t *testing.T) {
 		go func(k string, v []byte) {
 			defer wg.Done()
 
-			err := mutc.Delete(k)
+			err := mutc.Delete([]byte(k))
 			if err != nil {
 				fmt.Println(err)
 				t.Fail()
@@ -123,7 +114,7 @@ func TestMutcask(t *testing.T) {
 		go func(k string, v []byte) {
 			defer wg.Done()
 
-			_, err := mutc.Get(k)
+			_, err := mutc.Get([]byte(k))
 			if err != ErrNotFound {
 				fmt.Printf("err type wrong %#v \n", err)
 				t.Fail()

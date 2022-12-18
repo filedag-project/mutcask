@@ -1,44 +1,42 @@
 package mutcask
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"hash/crc32"
 	"sync"
 )
 
-var _ KVDB = (*memkv)(nil)
+var _ KVStore = (*memkv)(nil)
 
-func NewMemkv() KVDB {
+func NewMemkv() KVStore {
 	return &memkv{
 		m: make(map[string][]byte),
 	}
 }
 
-// apply KVDB using map for test case usage
+// apply KVStore using map for test case usage
 type memkv struct {
 	sync.RWMutex
 	m map[string][]byte
 }
 
-func (mkv *memkv) Put(key string, value []byte) error {
+func (mkv *memkv) Put(key []byte, value []byte) error {
 	mkv.Lock()
 	defer mkv.Unlock()
-	mkv.m[key] = clone(value)
+	mkv.m[string(key)] = clone(value)
 	return nil
 }
 
-func (mkv *memkv) Delete(key string) error {
+func (mkv *memkv) Delete(key []byte) error {
 	mkv.Lock()
 	defer mkv.Unlock()
-	delete(mkv.m, key)
+	delete(mkv.m, string(key))
 	return nil
 }
 
-func (mkv *memkv) Get(key string) ([]byte, error) {
+func (mkv *memkv) Get(key []byte) ([]byte, error) {
 	mkv.RLock()
 	defer mkv.RUnlock()
-	bs, ok := mkv.m[key]
+	bs, ok := mkv.m[string(key)]
 	if ok {
 		return clone(bs), nil
 	}
@@ -46,22 +44,21 @@ func (mkv *memkv) Get(key string) ([]byte, error) {
 	return nil, ErrNotFound
 }
 
-func (mkv *memkv) CheckSum(key string) (string, error) {
+func (mkv *memkv) CheckSum(key []byte) (uint32, error) {
 	mkv.RLock()
 	defer mkv.RUnlock()
-	bs, ok := mkv.m[key]
+	bs, ok := mkv.m[string(key)]
 	if ok {
-		sum := (sha256.Sum256(bs))
-		return hex.EncodeToString(sum[:]), nil
+		return crc32.ChecksumIEEE(bs), nil
 	}
 
-	return "", ErrNotFound
+	return 0, ErrNotFound
 }
 
-func (mkv *memkv) Size(key string) (int, error) {
+func (mkv *memkv) Size(key []byte) (int, error) {
 	mkv.RLock()
 	defer mkv.RUnlock()
-	bs, ok := mkv.m[key]
+	bs, ok := mkv.m[string(key)]
 	if ok {
 		return len(bs), nil
 	}
@@ -69,20 +66,23 @@ func (mkv *memkv) Size(key string) (int, error) {
 	return -1, ErrNotFound
 }
 
-func (mkv *memkv) AllKeysChan(ctx context.Context) (chan string, error) {
-	kc := make(chan string)
-	go func(ctx context.Context, m *memkv) {
-		defer close(kc)
-		for key := range m.m {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				kc <- key
-			}
-		}
-	}(ctx, mkv)
-	return kc, nil
+func (mkv *memkv) Has(key []byte) (bool, error) {
+	mkv.RLock()
+	defer mkv.RUnlock()
+	_, ok := mkv.m[string(key)]
+	if ok {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (mkv *memkv) Scan([]byte, int) ([]KVPair, error) {
+	return nil, ErrNotImpl
+}
+
+func (mkv *memkv) ScanKeys([]byte, int) ([][]byte, error) {
+	return nil, ErrNotImpl
 }
 
 func (mkv *memkv) Close() error {

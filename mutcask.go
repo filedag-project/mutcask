@@ -1,40 +1,36 @@
 package mutcask
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"hash/crc32"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	fslock "github.com/ipfs/go-fs-lock"
 	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-const lockFileName = "repo.lock"
-const keys_dir = "keys"
-
-var _ KVDB = (*mutcask)(nil)
+var _ KVStore = (*mutcask)(nil)
 
 type mutcask struct {
 	sync.Mutex
-	cfg            *Config
-	caskMap        *CaskMap
-	createCaskChan chan *createCaskRequst
-	close          func()
-	closeChan      chan struct{}
-	keys           *leveldb.DB
+	cfg        *Config
+	close      func()
+	closeChan  chan struct{}
+	appendChan chan *pairWithChan
+	keys       *leveldb.DB
+	ss         *SysState
+	w          *os.File
 }
 
 func NewMutcask(opts ...Option) (*mutcask, error) {
 	m := &mutcask{
-		cfg:            defaultConfig(),
-		createCaskChan: make(chan *createCaskRequst),
-		closeChan:      make(chan struct{}),
+		cfg:        defaultConfig(),
+		closeChan:  make(chan struct{}),
+		appendChan: make(chan *pairWithChan),
 	}
 	for _, opt := range opts {
 		opt(m.cfg)
@@ -56,7 +52,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 		}
 	}
 	// try to get the repo lock
-	locked, err := fslock.Locked(repoPath, lockFileName)
+	locked, err := fslock.Locked(repoPath, LOCK_FILE_NAME)
 	if err != nil {
 		return nil, fmt.Errorf("could not check lock status: %w", err)
 	}
@@ -64,121 +60,170 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 		return nil, ErrRepoLocked
 	}
 
-	unlockRepo, err := fslock.Lock(repoPath, lockFileName)
+	unlockRepo, err := fslock.Lock(repoPath, LOCK_FILE_NAME)
 	if err != nil {
 		return nil, fmt.Errorf("could not lock the repo: %w", err)
 	}
-	if m.cfg.InitBuf > 0 {
-		setInitBuf(m.cfg.InitBuf)
+	// if m.cfg.InitBuf > 0 {
+	// 	setInitBuf(m.cfg.InitBuf)
+	// }
+	var ss *SysState
+	ss, err = LoadSys(repoPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			ss = &SysState{
+				Cap: m.cfg.Capacity,
+			}
+			if err := InitSysJson(repoPath, ss); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
-	db, err := leveldb.OpenFile(filepath.Join(repoPath, keys_dir), nil)
+	m.ss = ss
+	if err := os.Mkdir(filepath.Join(repoPath, V_LOG_DIR), 0755); err != nil {
+		fmt.Println(err)
+	}
+	m.w, err = os.OpenFile(VLogPath(repoPath, ss.ActiveID), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+	db, err := leveldb.OpenFile(filepath.Join(repoPath, KEYS_DIR), nil)
 	if err != nil {
 		return nil, err
 	}
 	m.keys = db
-	m.caskMap, err = buildCaskMap(m.cfg, db)
-	if err != nil {
-		return nil, err
-	}
+
 	var once sync.Once
 	m.close = func() {
 		once.Do(func() {
+			m.FlushSys()
 			close(m.closeChan)
 			unlockRepo.Close()
 		})
 	}
-	if m.cfg.Migrate {
-		doMigrate(m.cfg, m.keys)
-	}
-	m.handleCreateCask()
-	return m, nil
-}
-
-func (m *mutcask) handleCreateCask() {
 	go func(m *mutcask) {
-		ids := []uint32{}
 		for {
 			select {
 			case <-m.closeChan:
 				return
-			case req := <-m.createCaskChan:
-				func() {
-					// fmt.Printf("received cask create request, id = %d\n", req.id)
-					if hasId(ids, req.id) {
-						req.done <- ErrNone
-						return
-					}
-					cask := NewCask(req.id, m.keys)
-					var err error
-					// create vlog file
-					cask.vLog, err = os.OpenFile(filepath.Join(m.cfg.Path, m.vLogName(req.id)), os.O_RDWR|os.O_CREATE, 0644)
-					if err != nil {
-						req.done <- err
-						return
-					}
-					// // create hintlog file
-					// cask.hintLog, err = os.OpenFile(filepath.Join(m.cfg.Path, m.hintLogName(req.id)), os.O_RDWR|os.O_CREATE, 0644)
-					// if err != nil {
-					// 	req.done <- err
-					// 	return
-					// }
-					m.caskMap.Add(req.id, cask)
-					ids = append(ids, req.id)
-					req.done <- ErrNone
-				}()
+			case p := <-m.appendChan:
+				res := &response{}
+				err := m.append(&p.pair)
+				if err != nil {
+					res.err = err
+				} else {
+					res.ok = true
+				}
+				p.res <- res
 			}
 		}
 	}(m)
+	return m, nil
 }
 
-func (m *mutcask) vLogName(id uint32) string {
-	return fmt.Sprintf("%08d%s", id, vLogSuffix)
-}
-
-// func (m *mutcask) hintLogName(id uint32) string {
-// 	return fmt.Sprintf("%08d%s", id, hintLogSuffix)
-// }
-
-func (m *mutcask) Put(key string, value []byte) (err error) {
-	id := m.fileID(key)
-	var cask *Cask
-	var has bool
-	cask, has = m.caskMap.Get(id)
-	if !has {
-		done := make(chan error)
-		m.createCaskChan <- &createCaskRequst{
-			id:   id,
-			done: done,
-		}
-		if err := <-done; err != ErrNone {
-			return err
-		}
-		cask, _ = m.caskMap.Get(id)
+func (m *mutcask) append(kv *pair) error {
+	activeId := m.ss.ActiveID
+	wsize, err := m.wsize()
+	if err != nil {
+		return err
+	}
+	d, ks, vs := kv.Encode()
+	wn, err := m.w.Write(d)
+	if err != nil {
+		return err
+	}
+	if len(d) != wn {
+		panic(fmt.Sprintf("append data size not match %d != %d", len(d), wn))
+	}
+	vl := &vLocate{
+		Id:  activeId,
+		Off: uint64(wsize) + V_LOG_HEADER_SIZE + uint64(ks),
+		Len: vs,
+		Ocu: wn,
+	}
+	vlbs, err := vl.Bytes()
+	if err != nil {
+		return err
+	}
+	batch := new(leveldb.Batch)
+	batch.Put(kv.k, vlbs)
+	batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_PREFIX, activeId))), kv.k)
+	if err := m.keys.Write(batch, nil); err != nil {
+		return err
 	}
 
-	return cask.Put(key, value)
+	atomic.AddUint64(&m.ss.KTotal, 1)
+	atomic.AddUint64(&m.ss.Used, uint64(wn))
+
+	// check if meets log file size limit
+	if wsize+int64(wn) >= m.cfg.MaxLogFileSize {
+		nextId := activeId + 1
+		f, err := os.OpenFile(VLogPath(m.cfg.Path, nextId), os.O_CREATE|os.O_EXCL, 0644)
+		if err != nil {
+			panic(err)
+		}
+		m.w = f
+		m.ss.ActiveID = nextId
+	}
+	return nil
 }
 
-func (m *mutcask) Delete(key string) error {
-	id := m.fileID(key)
-	cask, has := m.caskMap.Get(id)
-	if !has {
+func (m *mutcask) wsize() (int64, error) {
+	finfo, err := m.w.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return finfo.Size(), nil
+}
+
+func (m *mutcask) Put(key, value []byte) (err error) {
+	resc := make(chan *response)
+	m.appendChan <- &pairWithChan{
+		pair: pair{
+			k: key,
+			v: value,
+		},
+		res: resc,
+	}
+	ret := <-resc
+
+	return ret.err
+}
+
+func (m *mutcask) Delete(key []byte) error {
+	// detect if we have this key
+	bs, err := m.keys.Get(key, nil)
+	if err != nil { // key not exist, but just ignore error
 		return nil
 	}
-	return cask.Delete(key)
+	vl := &vLocate{}
+	if err = vl.Decode(bs); err != nil {
+		return err
+	}
+	if err := m.keys.Delete(key, nil); err != nil {
+		return err
+	}
+	pre := fmt.Sprintf("%s_%d", V_LOG_DEL_PREFIX, vl.Id)
+	if err := m.keys.Put([]byte(TimestampPrefix(pre)), key, nil); err != nil {
+		return err
+	}
+	atomic.AddUint64(&m.ss.Trash, uint64(vl.Ocu))
+	return nil
 }
 
-func (m *mutcask) Get(key string) ([]byte, error) {
-	hint, err := get_hint(m.keys, key)
+func (m *mutcask) Get(key []byte) ([]byte, error) {
+	bs, err := m.keys.Get(key, nil)
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	id := m.fileID(key)
-	fp := filepath.Join(m.cfg.Path, m.vLogName(id))
+	vl := &vLocate{}
+	if err = vl.Decode(bs); err != nil {
+		return nil, err
+	}
 
-	buf := vBuf.Get().(*vbuffer)
-	buf.size(int(hint.VSize))
-	defer vBuf.Put(buf)
+	fp := VLogPath(m.cfg.Path, vl.Id)
 
 	fh, err := os.Open(fp)
 	if err != nil {
@@ -186,103 +231,62 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	}
 	defer fh.Close()
 
-	_, err = fh.ReadAt(*buf, int64(hint.VOffset))
+	buf := make([]byte, vl.Len)
+	_, err = fh.ReadAt(buf, int64(vl.Off))
 	if err != nil {
 		return nil, err
 	}
-	v, err := DecodeValue(*buf, true)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return buf, nil
 }
 
-func (m *mutcask) CheckSum(key string) (string, error) {
+func (m *mutcask) CheckSum(key []byte) (uint32, error) {
 	v, err := m.Get(key)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	sum := sha256.Sum256(v)
-	return hex.EncodeToString(sum[:]), nil
+	return crc32.ChecksumIEEE(v), nil
 }
 
-func (m *mutcask) Size(key string) (int, error) {
-	// id := m.fileID(key)
-	// cask, has := m.caskMap.Get(id)
-	// if !has {
-	// 	return -1, ErrNotFound
-	// }
-	hint, err := get_hint(m.keys, key)
+func (m *mutcask) Size(key []byte) (int, error) {
+	bs, err := m.keys.Get(key, nil)
 	if err != nil {
-		return -1, ErrNotFound
+		return 0, ErrNotFound
 	}
-	return int(hint.VSize - 4), nil
+	vl := &vLocate{}
+	if err = vl.Decode(bs); err != nil {
+		return 0, err
+	}
+
+	return int(vl.Len), nil
+}
+
+func (m *mutcask) Has(key []byte) (bool, error) {
+	return m.keys.Has(key, nil)
+}
+
+func (m *mutcask) Scan(prefix []byte, max int) ([]KVPair, error) {
+	return nil, ErrNotImpl
+}
+
+func (m *mutcask) ScanKeys(prefix []byte, max int) ([][]byte, error) {
+	if max <= 0 {
+		max = DEFAULT_SCAN_MAX
+	}
+	keyList := make([][]byte, 0)
+	count := 0
+	iter := m.keys.NewIterator(util.BytesPrefix(prefix), nil)
+	for iter.Next() && count < DEFAULT_SCAN_MAX {
+		count++
+		keyList = append(keyList, iter.Key())
+	}
+	return keyList, nil
 }
 
 func (m *mutcask) Close() error {
-	m.caskMap.CloseAll()
 	m.close()
 	return nil
 }
-func (m *mutcask) AllKeysChan(ctx context.Context) (chan string, error) {
-	iter := m.keys.NewIterator(nil, nil)
-	out := make(chan string, 1)
-	go func(iter iterator.Iterator, oc chan string) {
-		defer iter.Release()
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			if !iter.Next() {
-				return
-			}
-			out <- string(iter.Key())
-		}
-		// Todo: log if has iter.Error()
-	}(iter, out)
-	return out, nil
-	// kc := make(chan string)
-	// go func(ctx context.Context, m *mutcask) {
-	// 	defer close(kc)
-	// 	for _, cask := range m.caskMap.m {
-	// 		cask.keyMap.m.Ascend(func(it btree.Item) bool {
-	// 			if h, ok := it.(*Hint); ok {
-	// 				if h.Deleted {
-	// 					return true
-	// 				}
-	// 				select {
-	// 				case <-ctx.Done():
-	// 					return false
-	// 				default:
-	// 					kc <- h.Key
-	// 				}
-	// 			}
-	// 			return false
-	// 		})
-	// 	}
-	// }(ctx, m)
-	// return kc, nil
-}
 
-func (m *mutcask) fileID(key string) uint32 {
-	crc := crc32.ChecksumIEEE([]byte(key))
-	return crc % m.cfg.CaskNum
-}
-
-type createCaskRequst struct {
-	id   uint32
-	done chan error
-}
-
-func hasId(ids []uint32, id uint32) bool {
-	for _, item := range ids {
-		if item == id {
-			return true
-		}
-	}
-	return false
+func (m *mutcask) FlushSys() error {
+	return FlushSys(m.cfg.Path, m.ss)
 }

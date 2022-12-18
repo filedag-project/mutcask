@@ -1,20 +1,40 @@
 package mutcask
 
 import (
-	"context"
-
-	"golang.org/x/xerrors"
+	"fmt"
 )
 
-var ErrNotFound = xerrors.New("kv: key not found")
+var (
+	ErrNotFound = fmt.Errorf("kv: key not found")
+	ErrNotImpl  = fmt.Errorf("kv: method not implemented")
+)
 
-type KVDB interface {
-	Put(string, []byte) error
-	Delete(string) error
-	Get(string) ([]byte, error)
-	Size(string) (int, error)
-	CheckSum(string) (string, error)
+type KVStore interface {
+	KVBasic
+	KVScanner
+	KVAdvance
 
-	AllKeysChan(context.Context) (chan string, error)
 	Close() error
+}
+
+type KVBasic interface {
+	Get([]byte) ([]byte, error)
+	Put([]byte, []byte) error
+	Has([]byte) (bool, error)
+	Size([]byte) (int, error)
+	Delete([]byte) error
+}
+
+type KVScanner interface {
+	Scan(prefix []byte, max int) ([]KVPair, error)
+	ScanKeys(prefix []byte, max int) ([][]byte, error)
+}
+
+type KVAdvance interface {
+	CheckSum([]byte) (uint32, error)
+}
+
+type KVPair interface {
+	Key() []byte
+	Value() []byte
 }

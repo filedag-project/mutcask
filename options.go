@@ -1,29 +1,18 @@
 package mutcask
 
 type Config struct {
-	Path            string
-	CaskNum         uint32
-	HintBootReadNum int
-	InitBuf         int
-	Migrate         bool
-	MaxLogFileSize  int
+	Path           string
+	MaxLogFileSize int64
+	Capacity       uint64
 }
 
 func defaultConfig() *Config {
 	return &Config{
-		CaskNum:         256,
-		HintBootReadNum: 1000,
-		MaxLogFileSize:  1 << 20,
+		MaxLogFileSize: 4 << 30,
 	}
 }
 
 type Option func(cfg *Config)
-
-func CaskNumConf(caskNum int) Option {
-	return func(cfg *Config) {
-		cfg.CaskNum = uint32(caskNum)
-	}
-}
 
 func PathConf(dir string) Option {
 	return func(cfg *Config) {
@@ -31,20 +20,14 @@ func PathConf(dir string) Option {
 	}
 }
 
-func HintBootReadNumConf(hn int) Option {
+func MaxLogFileSize(size int64) Option {
 	return func(cfg *Config) {
-		cfg.HintBootReadNum = hn
+		cfg.MaxLogFileSize = size
 	}
 }
 
-func InitBufConf(size int) Option {
+func CapacityConf(size uint64) Option {
 	return func(cfg *Config) {
-		cfg.InitBuf = size
-	}
-}
-
-func MigrateConf() Option {
-	return func(cfg *Config) {
-		cfg.Migrate = true
+		cfg.Capacity = size
 	}
 }

@@ -1,16 +1,14 @@
 package mutcask
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"hash/crc32"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-var _ KVDB = (*levedbKV)(nil)
+var _ KVStore = (*levedbKV)(nil)
 
 type levedbKV struct {
 	db *leveldb.DB
@@ -26,12 +24,12 @@ func NewLevedbKV(dir string) (*levedbKV, error) {
 	}, nil
 }
 
-func (kv *levedbKV) Put(key string, value []byte) error {
-	return kv.db.Put([]byte(key), value, nil)
+func (kv *levedbKV) Put(key []byte, value []byte) error {
+	return kv.db.Put(key, value, nil)
 }
 
-func (kv *levedbKV) Get(key string) ([]byte, error) {
-	bs, err := kv.db.Get([]byte(key), nil)
+func (kv *levedbKV) Get(key []byte) ([]byte, error) {
+	bs, err := kv.db.Get(key, nil)
 	if err == nil {
 		return bs, nil
 	}
@@ -41,16 +39,15 @@ func (kv *levedbKV) Get(key string) ([]byte, error) {
 	return nil, err
 }
 
-func (kv *levedbKV) CheckSum(key string) (string, error) {
+func (kv *levedbKV) CheckSum(key []byte) (uint32, error) {
 	v, err := kv.Get(key)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	sum := sha256.Sum256(v)
-	return hex.EncodeToString(sum[:]), nil
+	return crc32.ChecksumIEEE(v), nil
 }
 
-func (kv *levedbKV) Size(key string) (int, error) {
+func (kv *levedbKV) Size(key []byte) (int, error) {
 	v, err := kv.Get(key)
 	if err != nil {
 		return -1, err
@@ -59,30 +56,48 @@ func (kv *levedbKV) Size(key string) (int, error) {
 	return len(v), nil
 }
 
-func (kv *levedbKV) Delete(key string) error {
-	return kv.db.Delete([]byte(key), nil)
+func (kv *levedbKV) Has(key []byte) (bool, error) {
+	has, _ := kv.db.Has(key, nil)
+	if has {
+		return has, nil
+	}
+
+	return false, nil
 }
 
-func (kv *levedbKV) AllKeysChan(ctx context.Context) (chan string, error) {
-	iter := kv.db.NewIterator(nil, nil)
-	out := make(chan string, 1)
-	go func(iter iterator.Iterator, oc chan string) {
-		defer iter.Release()
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			if !iter.Next() {
-				return
-			}
-			out <- string(iter.Key())
-		}
-		// Todo: log if has iter.Error()
-	}(iter, out)
-	return out, nil
+func (kv *levedbKV) Delete(key []byte) error {
+	return kv.db.Delete(key, nil)
+}
+
+func (kv *levedbKV) Scan(prefix []byte, max int) ([]KVPair, error) {
+	if max <= 0 {
+		max = DEFAULT_SCAN_MAX
+	}
+	pairList := make([]KVPair, 0)
+	count := 0
+	iter := kv.db.NewIterator(util.BytesPrefix(prefix), nil)
+	for iter.Next() && count < DEFAULT_SCAN_MAX {
+		count++
+		pairList = append(pairList, &pair{
+			k: iter.Key(),
+			v: iter.Value(),
+		})
+	}
+	return pairList, nil
+}
+
+func (kv *levedbKV) ScanKeys(prefix []byte, max int) ([][]byte, error) {
+	if max <= 0 {
+		max = DEFAULT_SCAN_MAX
+	}
+	keyList := make([][]byte, 0)
+	count := 0
+	iter := kv.db.NewIterator(util.BytesPrefix(prefix), nil)
+	for iter.Next() && count < DEFAULT_SCAN_MAX {
+		count++
+		keyList = append(keyList, iter.Key())
+	}
+	return keyList, nil
 }
 
 func (kv *levedbKV) Close() error {
