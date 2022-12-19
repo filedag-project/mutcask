@@ -1,6 +1,7 @@
 package mutcask
 
 import (
+	"context"
 	"hash/crc32"
 	"sync"
 )
@@ -82,6 +83,10 @@ func (mkv *memkv) Scan([]byte, int) ([]KVPair, error) {
 }
 
 func (mkv *memkv) ScanKeys([]byte, int) ([][]byte, error) {
+	return nil, ErrNotImpl
+}
+
+func (mkv *memkv) AllKeysChan(context.Context) (chan string, error) {
 	return nil, ErrNotImpl
 }
 

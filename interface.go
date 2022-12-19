@@ -1,6 +1,7 @@
 package mutcask
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -32,6 +33,7 @@ type KVScanner interface {
 
 type KVAdvance interface {
 	CheckSum([]byte) (uint32, error)
+	AllKeysChan(context.Context) (chan string, error)
 }
 
 type KVPair interface {

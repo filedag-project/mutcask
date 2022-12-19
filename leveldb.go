@@ -1,6 +1,7 @@
 package mutcask
 
 import (
+	"context"
 	"hash/crc32"
 
 	"github.com/syndtr/goleveldb/leveldb"
@@ -98,6 +99,10 @@ func (kv *levedbKV) ScanKeys(prefix []byte, max int) ([][]byte, error) {
 		keyList = append(keyList, iter.Key())
 	}
 	return keyList, nil
+}
+
+func (kv *levedbKV) AllKeysChan(context.Context) (chan string, error) {
+	return nil, ErrNotImpl
 }
 
 func (kv *levedbKV) Close() error {

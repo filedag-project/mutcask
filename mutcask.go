@@ -1,6 +1,7 @@
 package mutcask
 
 import (
+	"context"
 	"fmt"
 	"hash/crc32"
 	"os"
@@ -302,6 +303,10 @@ func (m *mutcask) ScanKeys(prefix []byte, max int) ([][]byte, error) {
 		keyList = append(keyList, iter.Key())
 	}
 	return keyList, nil
+}
+
+func (m *mutcask) AllKeysChan(context.Context) (chan string, error) {
+	return nil, ErrNotImpl
 }
 
 func (m *mutcask) Close() error {
