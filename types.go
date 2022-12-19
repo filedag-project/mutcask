@@ -23,6 +23,8 @@ type SysState struct {
 	Trash    uint64
 	KTotal   uint64
 	ActiveID uint64
+	NextID   uint64
+	dirty    uint32
 }
 
 type response struct {

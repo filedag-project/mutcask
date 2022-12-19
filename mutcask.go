@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	fslock "github.com/ipfs/go-fs-lock"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -35,6 +36,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	for _, opt := range opts {
 		opt(m.cfg)
 	}
+	// check if repo has been setup
 	repoPath := m.cfg.Path
 	if repoPath == "" {
 		return nil, ErrPathUndefined
@@ -64,15 +66,15 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not lock the repo: %w", err)
 	}
-	// if m.cfg.InitBuf > 0 {
-	// 	setInitBuf(m.cfg.InitBuf)
-	// }
+	// try to read sys state or create one
 	var ss *SysState
 	ss, err = LoadSys(repoPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			ss = &SysState{
-				Cap: m.cfg.Capacity,
+				Cap:      m.cfg.Capacity,
+				ActiveID: 0,
+				NextID:   1,
 			}
 			if err := InitSysJson(repoPath, ss); err != nil {
 				return nil, err
@@ -82,19 +84,24 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 		}
 	}
 	m.ss = ss
+	// make sure vlog dir has been created
 	if err := os.Mkdir(filepath.Join(repoPath, V_LOG_DIR), 0755); err != nil {
-		fmt.Println(err)
+		if !os.IsExist(err) {
+			fmt.Println(err)
+		}
 	}
+	// open active vlog file for append action
 	m.w, err = os.OpenFile(VLogPath(repoPath, ss.ActiveID), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
+	// use leveldb record keys
 	db, err := leveldb.OpenFile(filepath.Join(repoPath, KEYS_DIR), nil)
 	if err != nil {
 		return nil, err
 	}
 	m.keys = db
-
+	// operation before close
 	var once sync.Once
 	m.close = func() {
 		once.Do(func() {
@@ -103,6 +110,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 			unlockRepo.Close()
 		})
 	}
+	// setup append channel for put action
 	go func(m *mutcask) {
 		for {
 			select {
@@ -120,11 +128,23 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 			}
 		}
 	}(m)
+	// setup sys state flush check
+	go func(m *mutcask) {
+		ticker := time.NewTicker(time.Second * 3)
+		for {
+			select {
+			case <-m.closeChan:
+				return
+			case <-ticker.C:
+				m.FlushSys()
+			}
+		}
+	}(m)
 	return m, nil
 }
 
 func (m *mutcask) append(kv *pair) error {
-	activeId := m.ss.ActiveID
+	activeId := atomic.LoadUint64(&m.ss.ActiveID)
 	wsize, err := m.wsize()
 	if err != nil {
 		return err
@@ -135,7 +155,7 @@ func (m *mutcask) append(kv *pair) error {
 		return err
 	}
 	if len(d) != wn {
-		panic(fmt.Sprintf("append data size not match %d != %d", len(d), wn))
+		return fmt.Errorf("append data size not match %d != %d", len(d), wn)
 	}
 	vl := &vLocate{
 		Id:  activeId,
@@ -159,13 +179,14 @@ func (m *mutcask) append(kv *pair) error {
 
 	// check if meets log file size limit
 	if wsize+int64(wn) >= m.cfg.MaxLogFileSize {
-		nextId := activeId + 1
+		nextId := atomic.LoadUint64(&m.ss.NextID)
 		f, err := os.OpenFile(VLogPath(m.cfg.Path, nextId), os.O_CREATE|os.O_EXCL, 0644)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		m.w = f
-		m.ss.ActiveID = nextId
+		atomic.CompareAndSwapUint64(&m.ss.ActiveID, activeId, nextId)
+		atomic.AddUint64(&m.ss.NextID, 1)
 	}
 	return nil
 }
@@ -202,13 +223,14 @@ func (m *mutcask) Delete(key []byte) error {
 	if err = vl.Decode(bs); err != nil {
 		return err
 	}
-	if err := m.keys.Delete(key, nil); err != nil {
-		return err
-	}
 	pre := fmt.Sprintf("%s_%d", V_LOG_DEL_PREFIX, vl.Id)
-	if err := m.keys.Put([]byte(TimestampPrefix(pre)), key, nil); err != nil {
+	batch := new(leveldb.Batch)
+	batch.Delete(key)
+	batch.Put([]byte(TimestampPrefix(pre)), key)
+	if err := m.keys.Write(batch, nil); err != nil {
 		return err
 	}
+
 	atomic.AddUint64(&m.ss.Trash, uint64(vl.Ocu))
 	return nil
 }
@@ -287,6 +309,14 @@ func (m *mutcask) Close() error {
 	return nil
 }
 
-func (m *mutcask) FlushSys() error {
-	return FlushSys(m.cfg.Path, m.ss)
+func (m *mutcask) FlushSys() (err error) {
+	if atomic.LoadUint32(&m.ss.dirty) == 1 {
+		m.Lock()
+		defer m.Unlock()
+		if err = FlushSys(m.cfg.Path, m.ss); err == nil {
+			atomic.CompareAndSwapUint32(&m.ss.dirty, 1, 0)
+			return
+		}
+	}
+	return
 }
