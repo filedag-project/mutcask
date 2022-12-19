@@ -145,6 +145,14 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 }
 
 func (m *mutcask) append(kv *pair) error {
+	// detect update operation
+	var oldVL *vLocate
+	if bs, err := m.keys.Get(kv.k, nil); err == nil {
+		ovl := &vLocate{}
+		if err = ovl.Decode(bs); err == nil {
+			oldVL = ovl
+		}
+	}
 	activeId := atomic.LoadUint64(&m.ss.ActiveID)
 	wsize, err := m.wsize()
 	if err != nil {
@@ -171,12 +179,19 @@ func (m *mutcask) append(kv *pair) error {
 	batch := new(leveldb.Batch)
 	batch.Put(kv.k, vlbs)
 	batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_PREFIX, activeId))), kv.k)
+	if oldVL != nil {
+		batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_DEL_PREFIX, oldVL.Id))), kv.k)
+	}
 	if err := m.keys.Write(batch, nil); err != nil {
 		return err
 	}
 
 	atomic.AddUint64(&m.ss.KTotal, 1)
 	atomic.AddUint64(&m.ss.Used, uint64(wn))
+	if oldVL != nil {
+		atomic.AddUint64(&m.ss.Trash, uint64(oldVL.Ocu))
+	}
+	atomic.CompareAndSwapUint32(&m.ss.dirty, 0, 1)
 
 	// check if meets log file size limit
 	if wsize+int64(wn) >= m.cfg.MaxLogFileSize {
@@ -233,6 +248,7 @@ func (m *mutcask) Delete(key []byte) error {
 	}
 
 	atomic.AddUint64(&m.ss.Trash, uint64(vl.Ocu))
+	atomic.CompareAndSwapUint32(&m.ss.dirty, 0, 1)
 	return nil
 }
 
