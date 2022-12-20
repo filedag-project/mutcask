@@ -1,8 +1,10 @@
 package mutcask
 
 import (
+	"bytes"
 	"context"
 	"hash/crc32"
+	"sort"
 	"sync"
 )
 
@@ -78,12 +80,41 @@ func (mkv *memkv) Has(key []byte) (bool, error) {
 	return false, nil
 }
 
-func (mkv *memkv) Scan([]byte, int) ([]Pair, error) {
-	return nil, ErrNotImpl
+func (mkv *memkv) Scan(pre []byte, max int) ([]Pair, error) {
+	mkv.RLock()
+	defer mkv.RUnlock()
+	res := make([]Pair, 0)
+	for k, v := range mkv.m {
+		if bytes.HasPrefix([]byte(k), pre) {
+			res = append(res, Pair{
+				K: []byte(k),
+				V: v,
+			})
+		}
+	}
+	sort.Sort((PairsByKey)(res))
+	if len(res) > max {
+		res = res[:max]
+	}
+
+	return res, nil
 }
 
-func (mkv *memkv) ScanKeys([]byte, int) ([][]byte, error) {
-	return nil, ErrNotImpl
+func (mkv *memkv) ScanKeys(pre []byte, max int) ([][]byte, error) {
+	mkv.RLock()
+	defer mkv.RUnlock()
+	res := make([][]byte, 0)
+	for k := range mkv.m {
+		if bytes.HasPrefix([]byte(k), pre) {
+			res = append(res, []byte(k))
+		}
+	}
+	sort.Sort((SKeys)(res))
+	if len(res) > max {
+		res = res[:max]
+	}
+
+	return res, nil
 }
 
 func (mkv *memkv) AllKeysChan(context.Context) (chan string, error) {

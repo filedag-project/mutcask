@@ -1,6 +1,7 @@
 package mutcask
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/fxamacker/cbor/v2"
@@ -70,6 +71,30 @@ func (p *Pair) Decode(buf []byte) error {
 	copy(p.K, buf[V_LOG_HEADER_SIZE:ks])
 	copy(p.V, buf[V_LOG_HEADER_SIZE+ks:])
 	return nil
+}
+
+type PairsByKey []Pair
+
+func (p PairsByKey) Len() int {
+	return len(p)
+}
+func (p PairsByKey) Less(i, j int) bool {
+	return bytes.Compare(p[i].K, p[j].K) < 0
+}
+func (p PairsByKey) Swap(i, j int) {
+	p[i], p[j] = p[j], p[i]
+}
+
+type SKeys [][]byte
+
+func (s SKeys) Len() int {
+	return len(s)
+}
+func (s SKeys) Less(i, j int) bool {
+	return bytes.Compare(s[i], s[j]) < 0
+}
+func (s SKeys) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
 }
 
 type pairWithChan struct {
