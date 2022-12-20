@@ -78,7 +78,7 @@ func (mkv *memkv) Has(key []byte) (bool, error) {
 	return false, nil
 }
 
-func (mkv *memkv) Scan([]byte, int) ([]KVPair, error) {
+func (mkv *memkv) Scan([]byte, int) ([]Pair, error) {
 	return nil, ErrNotImpl
 }
 

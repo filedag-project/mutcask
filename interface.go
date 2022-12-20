@@ -27,16 +27,11 @@ type KVBasic interface {
 }
 
 type KVScanner interface {
-	Scan(prefix []byte, max int) ([]KVPair, error)
+	Scan(prefix []byte, max int) ([]Pair, error)
 	ScanKeys(prefix []byte, max int) ([][]byte, error)
 }
 
 type KVAdvance interface {
 	CheckSum([]byte) (uint32, error)
 	AllKeysChan(context.Context) (chan string, error)
-}
-
-type KVPair interface {
-	Key() []byte
-	Value() []byte
 }

@@ -32,35 +32,30 @@ type response struct {
 	ok  bool
 }
 
-type pair struct {
-	k []byte
-	v []byte
+type Pair struct {
+	K []byte
+	V []byte
 }
 
-func NewPair(k, v []byte) *pair {
-	return &pair{k, v}
+func NewPair(k, v []byte) *Pair {
+	return &Pair{
+		K: k,
+		V: v,
+	}
 }
 
-func (p *pair) Key() []byte {
-	return p.k
-}
-
-func (p *pair) Value() []byte {
-	return p.v
-}
-
-func (p *pair) Encode() ([]byte, int, int) {
-	ks := len(p.k)
-	vs := len(p.v)
+func (p *Pair) Encode() ([]byte, int, int) {
+	ks := len(p.K)
+	vs := len(p.V)
 	buf := make([]byte, V_LOG_HEADER_SIZE+ks+vs)
 	binary.LittleEndian.PutUint32(buf[:SL], uint32(ks))
 	binary.LittleEndian.PutUint32(buf[SL:V_LOG_HEADER_SIZE], uint32(vs))
-	copy(buf[8:V_LOG_HEADER_SIZE+ks], p.k[:])
-	copy(buf[V_LOG_HEADER_SIZE+ks:], p.v[:])
+	copy(buf[8:V_LOG_HEADER_SIZE+ks], p.K[:])
+	copy(buf[V_LOG_HEADER_SIZE+ks:], p.V[:])
 	return buf, ks, vs
 }
 
-func (p *pair) Decode(buf []byte) error {
+func (p *Pair) Decode(buf []byte) error {
 	bl := len(buf)
 	if bl < V_LOG_HEADER_SIZE {
 		return ErrBufSize
@@ -70,15 +65,15 @@ func (p *pair) Decode(buf []byte) error {
 	if uint32(bl) != V_LOG_HEADER_SIZE+ks+vs {
 		return ErrBufSize
 	}
-	p.k = make([]byte, ks)
-	p.v = make([]byte, vs)
-	copy(p.k, buf[V_LOG_HEADER_SIZE:ks])
-	copy(p.v, buf[V_LOG_HEADER_SIZE+ks:])
+	p.K = make([]byte, ks)
+	p.V = make([]byte, vs)
+	copy(p.K, buf[V_LOG_HEADER_SIZE:ks])
+	copy(p.V, buf[V_LOG_HEADER_SIZE+ks:])
 	return nil
 }
 
 type pairWithChan struct {
-	pair
+	Pair
 	res chan *response
 }
 

@@ -70,18 +70,18 @@ func (kv *levedbKV) Delete(key []byte) error {
 	return kv.db.Delete(key, nil)
 }
 
-func (kv *levedbKV) Scan(prefix []byte, max int) ([]KVPair, error) {
+func (kv *levedbKV) Scan(prefix []byte, max int) ([]Pair, error) {
 	if max <= 0 {
 		max = DEFAULT_SCAN_MAX
 	}
-	pairList := make([]KVPair, 0)
+	pairList := make([]Pair, 0)
 	count := 0
 	iter := kv.db.NewIterator(util.BytesPrefix(prefix), nil)
 	for iter.Next() && count < DEFAULT_SCAN_MAX {
 		count++
-		pairList = append(pairList, &pair{
-			k: iter.Key(),
-			v: iter.Value(),
+		pairList = append(pairList, Pair{
+			K: iter.Key(),
+			V: iter.Value(),
 		})
 	}
 	return pairList, nil

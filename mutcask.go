@@ -119,7 +119,7 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 				return
 			case p := <-m.appendChan:
 				res := &response{}
-				err := m.append(&p.pair)
+				err := m.append(&p.Pair)
 				if err != nil {
 					res.err = err
 				} else {
@@ -144,10 +144,10 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	return m, nil
 }
 
-func (m *mutcask) append(kv *pair) error {
+func (m *mutcask) append(kv *Pair) error {
 	// detect update operation
 	var oldVL *vLocate
-	if bs, err := m.keys.Get(kv.k, nil); err == nil {
+	if bs, err := m.keys.Get(kv.K, nil); err == nil {
 		ovl := &vLocate{}
 		if err = ovl.Decode(bs); err == nil {
 			oldVL = ovl
@@ -177,10 +177,10 @@ func (m *mutcask) append(kv *pair) error {
 		return err
 	}
 	batch := new(leveldb.Batch)
-	batch.Put(kv.k, vlbs)
-	batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_PREFIX, activeId))), kv.k)
+	batch.Put(kv.K, vlbs)
+	batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_PREFIX, activeId))), kv.K)
 	if oldVL != nil {
-		batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_DEL_PREFIX, oldVL.Id))), kv.k)
+		batch.Put([]byte(TimestampPrefix(fmt.Sprintf("%s_%d", V_LOG_DEL_PREFIX, oldVL.Id))), kv.K)
 	}
 	if err := m.keys.Write(batch, nil); err != nil {
 		return err
@@ -218,9 +218,9 @@ func (m *mutcask) wsize() (int64, error) {
 func (m *mutcask) Put(key, value []byte) (err error) {
 	resc := make(chan *response)
 	m.appendChan <- &pairWithChan{
-		pair: pair{
-			k: key,
-			v: value,
+		Pair: Pair{
+			K: key,
+			V: value,
 		},
 		res: resc,
 	}
@@ -303,7 +303,7 @@ func (m *mutcask) Has(key []byte) (bool, error) {
 	return m.keys.Has(key, nil)
 }
 
-func (m *mutcask) Scan(prefix []byte, max int) ([]KVPair, error) {
+func (m *mutcask) Scan(prefix []byte, max int) ([]Pair, error) {
 	return nil, ErrNotImpl
 }
 
