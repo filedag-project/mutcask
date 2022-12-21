@@ -93,6 +93,9 @@ func (mkv *memkv) Scan(pre []byte, max int) ([]Pair, error) {
 		}
 	}
 	sort.Sort((PairsByKey)(res))
+	if max <= 0 {
+		max = DEFAULT_SCAN_MAX
+	}
 	if len(res) > max {
 		res = res[:max]
 	}
@@ -110,6 +113,9 @@ func (mkv *memkv) ScanKeys(pre []byte, max int) ([][]byte, error) {
 		}
 	}
 	sort.Sort((SKeys)(res))
+	if max <= 0 {
+		max = DEFAULT_SCAN_MAX
+	}
 	if len(res) > max {
 		res = res[:max]
 	}
