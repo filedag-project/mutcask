@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
@@ -39,6 +40,10 @@ func (kv *levedbKV) Get(key string) ([]byte, error) {
 		return nil, ErrNotFound
 	}
 	return nil, err
+}
+
+func (kv *levedbKV) Read(string, io.Writer) (int, error) {
+	return 0, ErrNoSupport
 }
 
 func (kv *levedbKV) CheckSum(key string) (string, error) {

@@ -13,4 +13,5 @@ var (
 	ErrHintLogBroken       = xerrors.New("mutcask: hint log broken")
 	ErrReadHintBeyondRange = xerrors.New("mutcask: read hint out of file range")
 	ErrRepoLocked          = xerrors.New("mutcask: repo has been locked")
+	ErrNoSupport           = xerrors.New("mutcask: method not support")
 )

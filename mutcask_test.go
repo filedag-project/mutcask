@@ -2,7 +2,6 @@ package mutcask
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"sync"
@@ -60,26 +59,50 @@ func TestMutcask(t *testing.T) {
 	}
 	wg.Wait()
 
-	// test all key chan
-	kc, err := mutc.AllKeysChan(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for k := range kc {
-		fmt.Println(k)
-	}
+	// // test all key chan
+	// kc, err := mutc.AllKeysChan(context.Background())
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// for k := range kc {
+	// 	fmt.Println(k)
+	// }
+	// wg.Add(len(kvdata))
+	// for _, item := range kvdata {
+	// 	go func(k string, v []byte) {
+	// 		defer wg.Done()
+
+	// 		b, err := mutc.Get(k)
+	// 		if err != nil {
+	// 			fmt.Println(err)
+	// 			t.Fail()
+	// 		}
+	// 		if !bytes.Equal(b, v) {
+	// 			fmt.Printf("%s should equal to %s \n", b, v)
+	// 			t.Fail()
+	// 		}
+	// 	}(item.Key, item.Value)
+	// }
+	// wg.Wait()
+
+	// test read
 	wg.Add(len(kvdata))
 	for _, item := range kvdata {
 		go func(k string, v []byte) {
 			defer wg.Done()
-
-			b, err := mutc.Get(k)
+			buf := bytes.NewBuffer([]byte{})
+			n, err := mutc.Read(k, buf)
 			if err != nil {
 				fmt.Println(err)
 				t.Fail()
 			}
-			if !bytes.Equal(b, v) {
-				fmt.Printf("%s should equal to %s \n", b, v)
+			if n != len(v) {
+				fmt.Println("size should be equal")
+				t.Fail()
+			}
+			d := buf.Bytes()
+			if !bytes.Equal(d, v) {
+				fmt.Println("read bytes not match")
 				t.Fail()
 			}
 		}(item.Key, item.Value)

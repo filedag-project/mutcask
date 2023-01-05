@@ -2,6 +2,7 @@ package mutcask
 
 import (
 	"context"
+	"io"
 
 	"golang.org/x/xerrors"
 )
@@ -14,6 +15,7 @@ type KVDB interface {
 	Get(string) ([]byte, error)
 	Size(string) (int, error)
 	CheckSum(string) (string, error)
+	Read(string, io.Writer) (int, error)
 
 	AllKeysChan(context.Context) (chan string, error)
 	Close() error

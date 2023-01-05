@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -196,6 +197,28 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	}
 
 	return v, nil
+}
+
+func (m *mutcask) Read(key string, w io.Writer) (int, error) {
+	hint, err := get_hint(m.keys, key)
+	if err != nil {
+		return 0, ErrNotFound
+	}
+	id := m.fileID(key)
+	fp := filepath.Join(m.cfg.Path, m.vLogName(id))
+
+	fh, err := os.Open(fp)
+	if err != nil {
+		return 0, err
+	}
+	defer fh.Close()
+	vOffset := int64(hint.VOffset) + 4
+	if n, err := fh.Seek(vOffset, io.SeekStart); err != nil || n != vOffset {
+		return 0, fmt.Errorf("seek failed %s | %d | %d", err, n, vOffset)
+	}
+	n, err := io.CopyN(w, fh, int64(hint.VSize)-4)
+
+	return int(n), err
 }
 
 func (m *mutcask) CheckSum(key string) (string, error) {

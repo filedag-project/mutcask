@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/syndtr/goleveldb/leveldb/errors"
@@ -48,6 +49,10 @@ func (kv *cachedMutcask) Get(key string) ([]byte, error) {
 		return nil, ErrNotFound
 	}
 	return nil, err
+}
+
+func (kv *cachedMutcask) Read(string, io.Writer) (int, error) {
+	return 0, ErrNoSupport
 }
 
 func (kv *cachedMutcask) CheckSum(key string) (string, error) {
