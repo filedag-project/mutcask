@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	fslock "github.com/ipfs/go-fs-lock"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -28,6 +29,7 @@ type mutcask struct {
 	close          func()
 	closeChan      chan struct{}
 	keys           *leveldb.DB
+	readLock       chan struct{}
 }
 
 func NewMutcask(opts ...Option) (*mutcask, error) {
@@ -71,6 +73,11 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	// if m.cfg.InitBuf > 0 {
 	// 	setInitBuf(m.cfg.InitBuf)
 	// }
+	if m.cfg.MaxParallelRead < 1 {
+		m.cfg.MaxParallelRead = MAX_PARALLEL_READ
+	}
+	m.readLock = make(chan struct{}, m.cfg.MaxParallelRead)
+
 	db, err := leveldb.OpenFile(filepath.Join(repoPath, keys_dir), nil)
 	if err != nil {
 		return nil, err
@@ -169,6 +176,12 @@ func (m *mutcask) Delete(key string) error {
 }
 
 func (m *mutcask) Get(key string) ([]byte, error) {
+	start := time.Now()
+	m.readLock <- struct{}{}
+	defer func() {
+		<-m.readLock
+	}()
+	waitLockTime := time.Since(start).Seconds()
 	hint, err := get_hint(m.keys, key)
 	if err != nil {
 		return nil, ErrNotFound
@@ -195,7 +208,7 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("mutcask: get %s, time elapsed: %fs, wait lock: %fs, err: %v\n", key, time.Since(start).Seconds(), waitLockTime, err)
 	return v, nil
 }
 

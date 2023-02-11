@@ -39,7 +39,7 @@ func TestMutcask(t *testing.T) {
 		{"QmXgEMNz5JbajkQ8tXRJHgbC12aogba9gwTgqTQW2LCK35", []byte("839836")},
 		{"QmW6esdA2tsRmoiqmAgNx71vdNNtgJEd44CKt4nncUTsur", []byte("939836")},
 	}
-	mutc, err := NewMutcask(PathConf(tmpdirpath(t)), CaskNumConf(1))
+	mutc, err := NewMutcask(PathConf(tmpdirpath(t)), CaskNumConf(1), MaxParallelReadConf(5))
 	//mutc, err := NewMutcask(PathConf("/Users/lifeng/testdir/mutcask"), CaskNumConf(8))
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +132,7 @@ func TestMutcask(t *testing.T) {
 		}(item.Key, item.Value)
 	}
 	wg.Wait()
+
 }
 
 func tmpdirpath(t *testing.T) string {

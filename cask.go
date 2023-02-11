@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/google/btree"
@@ -219,6 +220,7 @@ func (c *Cask) Close() {
 }
 
 func (c *Cask) Put(key string, value []byte) (err error) {
+	start := time.Now()
 	retvc := make(chan retv)
 	c.actChan <- &action{
 		optype:   opwrite,
@@ -227,7 +229,7 @@ func (c *Cask) Put(key string, value []byte) (err error) {
 		retvchan: retvc,
 	}
 	ret := <-retvc
-
+	fmt.Printf("mutcask: put %s, time elapsed: %fs, err: %v\n", key, time.Since(start).Seconds(), ret.err)
 	return ret.err
 }
 

@@ -1,5 +1,7 @@
 package mutcask
 
+const MAX_PARALLEL_READ = 100
+
 type Config struct {
 	Path            string
 	CaskNum         uint32
@@ -7,6 +9,7 @@ type Config struct {
 	InitBuf         int
 	Migrate         bool
 	MaxLogFileSize  int
+	MaxParallelRead int
 }
 
 func defaultConfig() *Config {
@@ -14,6 +17,7 @@ func defaultConfig() *Config {
 		CaskNum:         256,
 		HintBootReadNum: 1000,
 		MaxLogFileSize:  1 << 20,
+		MaxParallelRead: MAX_PARALLEL_READ,
 	}
 }
 
@@ -34,6 +38,12 @@ func PathConf(dir string) Option {
 func HintBootReadNumConf(hn int) Option {
 	return func(cfg *Config) {
 		cfg.HintBootReadNum = hn
+	}
+}
+
+func MaxParallelReadConf(n int) Option {
+	return func(cfg *Config) {
+		cfg.MaxParallelRead = n
 	}
 }
 
