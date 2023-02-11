@@ -68,9 +68,9 @@ func NewMutcask(opts ...Option) (*mutcask, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not lock the repo: %w", err)
 	}
-	if m.cfg.InitBuf > 0 {
-		setInitBuf(m.cfg.InitBuf)
-	}
+	// if m.cfg.InitBuf > 0 {
+	// 	setInitBuf(m.cfg.InitBuf)
+	// }
 	db, err := leveldb.OpenFile(filepath.Join(repoPath, keys_dir), nil)
 	if err != nil {
 		return nil, err
@@ -176,9 +176,10 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	id := m.fileID(key)
 	fp := filepath.Join(m.cfg.Path, m.vLogName(id))
 
-	buf := vBuf.Get().(*vbuffer)
-	buf.size(int(hint.VSize))
-	defer vBuf.Put(buf)
+	// buf := vBuf.Get().(*vbuffer)
+	// buf.size(int(hint.VSize))
+	// defer vBuf.Put(buf)
+	buf := make([]byte, hint.VSize)
 
 	fh, err := os.Open(fp)
 	if err != nil {
@@ -186,11 +187,11 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	}
 	defer fh.Close()
 
-	_, err = fh.ReadAt(*buf, int64(hint.VOffset))
+	_, err = fh.ReadAt(buf, int64(hint.VOffset))
 	if err != nil {
 		return nil, err
 	}
-	v, err := DecodeValue(*buf, true)
+	v, err := DecodeValue(buf, true)
 	if err != nil {
 		return nil, err
 	}

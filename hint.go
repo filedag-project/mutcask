@@ -84,13 +84,13 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 	//km.m = make(map[string]*Hint)
 	hint.Seek(0, 0)
 	offset := uint64(0)
-	//buf := make([]byte, HintEncodeSize*hintBootReadNum)
+	buf := make([]byte, HintEncodeSize*hintBootReadNum)
 
-	buf := vBuf.Get().(*vbuffer)
-	buf.size(HintEncodeSize * hintBootReadNum)
-	defer vBuf.Put(buf)
+	// buf := vBuf.Get().(*vbuffer)
+	// buf.size(HintEncodeSize * hintBootReadNum)
+	// defer vBuf.Put(buf)
 	for {
-		n, err := hint.Read(*buf)
+		n, err := hint.Read(buf)
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func buildKeyMap(hint *os.File, hintBootReadNum int) (*KeyMap, error) {
 		unreadNum := 0
 		for unreadNum < n {
 			h := &Hint{}
-			if err = h.From((*buf)[unreadNum : unreadNum+HintEncodeSize]); err != nil {
+			if err = h.From(buf[unreadNum : unreadNum+HintEncodeSize]); err != nil {
 				return nil, err
 			}
 			unreadNum += HintEncodeSize
@@ -154,13 +154,13 @@ func migrateKeys(hint *os.File, hintBootReadNum int, keys *leveldb.DB) error {
 
 	hint.Seek(0, 0)
 	offset := uint64(0)
-	//buf := make([]byte, HintEncodeSize*hintBootReadNum)
+	buf := make([]byte, HintEncodeSize*hintBootReadNum)
 
-	buf := vBuf.Get().(*vbuffer)
-	buf.size(HintEncodeSize * hintBootReadNum)
-	defer vBuf.Put(buf)
+	// buf := vBuf.Get().(*vbuffer)
+	// buf.size(HintEncodeSize * hintBootReadNum)
+	// defer vBuf.Put(buf)
 	for {
-		n, err := hint.Read(*buf)
+		n, err := hint.Read(buf)
 		if err != nil && err != io.EOF {
 			return err
 		}
@@ -176,7 +176,7 @@ func migrateKeys(hint *os.File, hintBootReadNum int, keys *leveldb.DB) error {
 		unreadNum := 0
 		for unreadNum < n {
 			h := &Hint{}
-			if err = h.From((*buf)[unreadNum : unreadNum+HintEncodeSize]); err != nil {
+			if err = h.From((buf)[unreadNum : unreadNum+HintEncodeSize]); err != nil {
 				return err
 			}
 			unreadNum += HintEncodeSize

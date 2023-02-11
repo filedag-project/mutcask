@@ -74,7 +74,8 @@ func (h *Hint) Encode() (ret []byte, err error) {
 	if kl > MaxKeySize {
 		return nil, ErrKeySizeTooLong
 	}
-	ret = *(hintBuf.Get().(*([]byte)))
+	//ret = *(hintBuf.Get().(*([]byte)))
+	ret = make([]byte, HintEncodeSize)
 	if h.Deleted {
 		ret[0] = HintDeletedFlag
 	}
@@ -113,13 +114,13 @@ func (h *Hint) Less(than btree.Item) bool {
 		4 		: 	xxxx
 **/
 func EncodeValue(v []byte) []byte {
-	buf := vBuf.Get().(*vbuffer)
-	//ret = make([]byte, 4+len(v))
-	buf.size(4 + len(v))
+	//buf := vBuf.Get().(*vbuffer)
+	buf := make([]byte, 4+len(v))
+	//buf.size(4 + len(v))
 	c32 := crc32.ChecksumIEEE(v)
-	binary.LittleEndian.PutUint32((*buf)[0:4], c32)
-	copy((*buf)[4:], v)
-	return *buf
+	binary.LittleEndian.PutUint32((buf)[0:4], c32)
+	copy((buf)[4:], v)
+	return buf
 }
 
 func DecodeValue(buf []byte, verify bool) (v []byte, err error) {
@@ -325,7 +326,7 @@ func (c *Cask) dowrite(act *action) {
 	voffset := c.vLogSize
 	// encode value
 	encbytes := EncodeValue(act.value)
-	defer vBuf.Put((*vbuffer)(&encbytes))
+	// defer vBuf.Put((*vbuffer)(&encbytes))
 	// record encoded value size
 	vsize := uint32(len(encbytes))
 	// write to vlog file
