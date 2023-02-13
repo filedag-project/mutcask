@@ -229,7 +229,7 @@ func (c *Cask) Put(key string, value []byte) (err error) {
 		retvchan: retvc,
 	}
 	ret := <-retvc
-	fmt.Printf("mutcask: put %s, time elapsed: %fs, err: %v\n", key, time.Since(start).Seconds(), ret.err)
+	fmt.Printf("mutcask: put %s, size: %d, time elapsed: %fs, err: %v\n", key, len(value), time.Since(start).Seconds(), ret.err)
 	return ret.err
 }
 

@@ -1,6 +1,6 @@
 package mutcask
 
-const MAX_PARALLEL_READ = 100
+const MAX_PARALLEL_READ = 56
 
 type Config struct {
 	Path            string

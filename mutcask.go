@@ -208,7 +208,7 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("mutcask: get %s, time elapsed: %fs, wait lock: %fs, err: %v\n", key, time.Since(start).Seconds(), waitLockTime, err)
+	fmt.Printf("mutcask: get %s, size: %d, time elapsed: %fs, wait lock: %fs, err: %v\n", key, hint.VSize, time.Since(start).Seconds(), waitLockTime, err)
 	return v, nil
 }
 
