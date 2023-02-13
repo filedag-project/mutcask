@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/crc32"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -208,7 +209,9 @@ func (m *mutcask) Get(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("mutcask: get %s, size: %d, time elapsed: %fs, wait lock: %fs, err: %v\n", key, hint.VSize, time.Since(start).Seconds(), waitLockTime, err)
+	if rand.Intn(15) == 3 {
+		fmt.Printf("mutcask: get %s, size: %d, time elapsed: %fs, wait lock: %fs, err: %v\n", key, hint.VSize, time.Since(start).Seconds(), waitLockTime, err)
+	}
 	return v, nil
 }
 

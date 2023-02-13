@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -229,7 +230,9 @@ func (c *Cask) Put(key string, value []byte) (err error) {
 		retvchan: retvc,
 	}
 	ret := <-retvc
-	fmt.Printf("mutcask: put %s, size: %d, time elapsed: %fs, err: %v\n", key, len(value), time.Since(start).Seconds(), ret.err)
+	if rand.Intn(10) == 3 {
+		fmt.Printf("mutcask: put %s, size: %d, time elapsed: %fs, err: %v\n", key, len(value), time.Since(start).Seconds(), ret.err)
+	}
 	return ret.err
 }
 
